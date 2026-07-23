@@ -25,6 +25,8 @@ static_cell      = "2.1.1"
 epd-waveshare = "0.6.0"
 embedded-hal-bus = "0.3.0"
 embedded-graphics = "0.8.2"
+bbqueue = { version = "0.7.0", features = ["portable-atomic"] }
+embassy-sync = "0.8.0"
 
 
 # For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html
