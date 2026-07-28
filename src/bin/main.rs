@@ -45,7 +45,7 @@ use esp_hal::{
     spi::master::{AnySpi, Config, Spi},
     system::Stack,
     timer::timg::TimerGroup,
-    uart::{self, Uart},
+    uart::{self, RxConfig, Uart},
 };
 use esp_rtos::embassy::Executor;
 use log::{error, info};
@@ -110,18 +110,34 @@ async fn main(spawner: Spawner) -> ! {
         esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
 
-    let spi = Spi::new(peripherals.SPI2, Config::default())
-        .unwrap()
-        .with_sck(peripherals.GPIO18)
-        .with_mosi(peripherals.GPIO23);
+    // let spi = Spi::new(peripherals.SPI2, Config::default())
+    //     .unwrap()
+    //     .with_sck(peripherals.GPIO18)
+    //     .with_mosi(peripherals.GPIO23);
+
+    let tx = peripherals.GPIO16;
+    let rx = Input::new(
+        peripherals.GPIO17,
+        InputConfig::default().with_pull(Pull::Up),
+    );
 
     let uart = Uart::new(
-        peripherals.UART2,
-        uart::Config::default().with_baudrate(38400),
+        peripherals.UART1,
+        uart::Config::default()
+            .with_rx(
+                RxConfig::default()
+                    .with_fifo_full_threshold(16)
+                    .with_timeout(4),
+            )
+            .with_clock_source(uart::ClockSource::Apb)
+            .with_baudrate(38400)
+            .with_data_bits(uart::DataBits::_8)
+            .with_parity(uart::Parity::None)
+            .with_stop_bits(uart::StopBits::_1),
     )
     .unwrap()
-    .with_tx(peripherals.GPIO16)
-    .with_rx(peripherals.GPIO17)
+    .with_tx(tx)
+    .with_rx(rx)
     .into_async();
 
     let (mut rx_uart, tx_uart) = uart.split();
@@ -129,17 +145,17 @@ async fn main(spawner: Spawner) -> ! {
     // let (rx_buf, rx_descript, tx_buf, tx_descript) = dma_buffers!(4096, 512);
     // let mut rx_dma = DmaRxBuf::new(rx_descript, rx_buf).unwrap();
 
-    let bsy = Input::new(
-        peripherals.GPIO15,
-        InputConfig::default().with_pull(Pull::None),
-    );
-    let dc = Output::new(peripherals.GPIO4, Level::Low, OutputConfig::default());
-    let rst = Output::new(peripherals.GPIO22, Level::High, OutputConfig::default());
-    let cs = Output::new(peripherals.GPIO5, Level::High, OutputConfig::default());
+    // let bsy = Input::new(
+    //     peripherals.GPIO15,
+    //     InputConfig::default().with_pull(Pull::None),
+    // );
+    // let dc = Output::new(peripherals.GPIO4, Level::Low, OutputConfig::default());
+    // let rst = Output::new(peripherals.GPIO22, Level::High, OutputConfig::default());
+    // let cs = Output::new(peripherals.GPIO5, Level::High, OutputConfig::default());
 
-    let delay: Delay = Delay::default();
+    // let delay: Delay = Delay::default();
 
-    let mut spi_device = ExclusiveDevice::new(spi, cs, delay).unwrap();
+    // let mut spi_device = ExclusiveDevice::new(spi, cs, delay).unwrap();
 
     static CORE_1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
     let stack = CORE_1_STACK.init(Stack::new());
@@ -154,11 +170,11 @@ async fn main(spawner: Spawner) -> ! {
         move || {
             static EXECUTOR: StaticCell<Executor> = StaticCell::new();
             let executor = EXECUTOR.init(Executor::new());
-            let mut delay: Delay = Delay::default();
-            let mut epd = Epd2in13::new(&mut spi_device, bsy, dc, rst, &mut delay, None).unwrap();
+            // let mut delay: Delay = Delay::default();
+            // let mut epd = Epd2in13::new(&mut spi_device, bsy, dc, rst, &mut delay, None).unwrap();
 
             executor.run(|spawner| {
-                spawner.spawn(core_1_display(epd, spi_device).unwrap());
+                // spawner.spawn(core_1_display(epd, spi_device).unwrap());
                 spawner.spawn(core_1_serial(drx).unwrap());
             });
         },
@@ -169,14 +185,17 @@ async fn main(spawner: Spawner) -> ! {
     // let mut ticker = Ticker::every(Duration::from_millis(2000));
 
     loop {
-        let mut grant = trx.grant_max_remaining(128).unwrap();
+        let mut grant = trx.grant_max_remaining(64).unwrap();
 
         match rx_uart.read_async(&mut grant).await {
             Ok(read) => {
                 grant.commit(read);
             }
             Err(err) => {
-                error!("{err}");
+                error!(">>>>>>>>>>>>>>>>>>>> {err}");
+                let _ = rx_uart.check_for_errors().inspect_err(|e| {
+                    error!(">>> check: {e}");
+                });
                 grant.commit(0);
             }
         }
@@ -227,6 +246,7 @@ async fn core_1_display(mut display: EPDisplay, mut spi: ExclDvc) {
 type Cons = StreamConsumer<&'static BBQueue<Inline<4096>, AtomicCoord, BBNotify>>;
 #[embassy_executor::task]
 async fn core_1_serial(bbq: Cons) {
+    info!("spawn serial task");
     let mut msg_state = MsgStreamState::new();
     let mut msg_len = 0;
     let mut msg_len_bytes: [u8; 2] = [0; 2];
@@ -235,9 +255,8 @@ async fn core_1_serial(bbq: Cons) {
     loop {
         let mut offset = 0;
         let grant = bbq.wait_read().await;
+        offset = grant.len();
 
-        let len = grant.len();
-        grant.release(len);
         // while offset < grant.len() {
         //     let data = &grant[offset..];
         //     match msg_state {
@@ -302,6 +321,6 @@ async fn core_1_serial(bbq: Cons) {
         //         }
         //     }
         // }
-        // grant.release(offset);
+        grant.release(offset);
     }
 }
