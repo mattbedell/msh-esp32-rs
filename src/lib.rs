@@ -45,15 +45,15 @@ impl BBNotify {
         async move |mut f| {
             poll_fn(|ctx| {
                 if let Some(val) = f() {
-                    Poll::Ready(val)
-                } else {
-                    if wk.flag().swap(false, Ordering::Acquire) {
-                        ctx.waker().wake_by_ref();
-                    } else {
-                        wk.waker.register(ctx.waker());
-                    }
-                    Poll::Pending
+                    return Poll::Ready(val);
                 }
+
+                wk.waker.register(ctx.waker());
+
+                if let Some(val) = f() {
+                    return Poll::Ready(val);
+                }
+                Poll::Pending
             })
             .await
         }
@@ -75,11 +75,11 @@ impl ConstInit for BBNotify {
 
 impl Notifier for BBNotify {
     fn wake_one_consumer(&self) {
-        self.read.flag.store(true, Ordering::Release);
+        // self.read.flag.store(true, Ordering::Release);
         self.read.wake();
     }
     fn wake_one_producer(&self) {
-        self.write.flag.store(true, Ordering::Release);
+        // self.write.flag.store(true, Ordering::Release);
         self.write.wake();
     }
 }
