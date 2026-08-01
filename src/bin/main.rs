@@ -20,6 +20,7 @@ use bbqueue::{
         storage::Inline,
     },
 };
+use defmt::{info, error};
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Ticker, Timer};
 use embedded_graphics::{
@@ -48,7 +49,6 @@ use esp_hal::{
     uart::{self, RxConfig, Uart},
 };
 use esp_rtos::embassy::Executor;
-use log::{error, info};
 use static_cell::StaticCell;
 
 static BB: Texas<4096, BBNotify> = Texas::new();
@@ -83,7 +83,7 @@ impl MsgStreamState {
 )]
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
-    esp_println::logger::init_logger_from_env();
+    rtt_target::rtt_init_defmt!();
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
