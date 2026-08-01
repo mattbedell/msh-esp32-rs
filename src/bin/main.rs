@@ -7,8 +7,11 @@
 )]
 #![deny(clippy::large_stack_frames)]
 
-use defmt::{info, error};
+use core::{fmt::Write, str};
+
+use defmt::{error, info};
 use embassy_executor::Spawner;
+use embassy_time::{Duration, Ticker};
 use esp_hal::{
     clock::CpuClock,
     timer::timg::TimerGroup,
@@ -56,52 +59,52 @@ async fn main(_spawner: Spawner) -> ! {
         esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
 
-    // let tx = peripherals.GPIO16;
-    // let rx = Input::new(
-    //     peripherals.GPIO17,
-    //     InputConfig::default().with_pull(Pull::Up),
-    let tx = peripherals.GPIO43;
-    // let rx = Input::new(
-    //     peripherals.GPIO44,
-    //     // InputConfig::default().with_pull(Pull::Up),
-    //     InputConfig::default(),
-    // );
-    let rx = peripherals.GPIO44;
+    let tx = peripherals.GPIO1;
+    let rx = peripherals.GPIO2;
 
-    let uart = Uart::new(
+    let mut uart = Uart::new(
         peripherals.UART1,
         uart::Config::default()
             .with_rx(
-                RxConfig::default()
-                    // .with_fifo_full_threshold(32)
-                    // .with_timeout(4),
+                RxConfig::default(),
             )
             .with_clock_source(uart::ClockSource::Apb)
-            // .with_baudrate(38400)
-            // .with_data_bits(uart::DataBits::_8)
-            // .with_parity(uart::Parity::None)
-            // .with_stop_bits(uart::StopBits::_1),
+            .with_baudrate(38400)
     )
     .unwrap()
     .with_tx(tx)
-    .with_rx(rx)
-    .into_async();
+    .with_rx(rx);
 
-    let (mut rx_uart, tx_uart) = uart.split();
-
+    info!("main loop starting...");
     loop {
-        // let mut grant = trx.grant_max_remaining(64).unwrap();
-        let mut buf = [0u8; 64];
-
-        match rx_uart.read_async(&mut buf).await {
-            Ok(read) => {
-                info!("READ: {}", read);
-            }
-            Err(_err) => {
-                if let Err(err) = rx_uart.check_for_errors() {
-                    error!("check >>>> {}", err);
+        let mut buf = [0u8; 128];
+        if uart.read_ready() {
+            info!("read ready...");
+            match uart.read(&mut buf) {
+                Ok(r) => {
+                    info!("Read: {}", r);
+                },
+                Err(e) => {
+                    error!("read error: {:?}", e);
+                    match uart.check_for_rx_errors() {
+                        Ok(_) => info!("error check: ok"),
+                        Err(e) => error!("error check: {:?}", e),
+                    }
                 }
             }
         }
+
+        // if uart.write_ready() {
+        //     mbuf[cursor] = b'|';
+        //     match uart.write(&mbuf[..cursor]) {
+        //         Ok(r) => {
+        //             info!("sent: {}", r);
+        //             let _ = uart.flush();
+        //         },
+        //         Err(err) => error!("tx err: {:?}", err),
+        //     }
+        // }
+        // tick.next().await;
+        // cursor += 1;
     }
 }
