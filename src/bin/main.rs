@@ -7,16 +7,28 @@
 )]
 #![deny(clippy::large_stack_frames)]
 
-use core::{fmt::Write, str};
+use core::str;
 
-use defmt::{error, info};
+use bbqueue::{
+    BBQueue,
+    nicknames::Texas,
+    prod_cons::stream::StreamConsumer,
+    traits::{coordination::cas::AtomicCoord, storage::Inline},
+};
+use defmt::{debug, error, info};
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Ticker};
 use esp_hal::{
     clock::CpuClock,
+    system::Stack,
     timer::timg::TimerGroup,
-    uart::{self, RxConfig, Uart},
+    uart::{
+        self, RxConfig, Uart,
+        uhci::{RxConfig as UhciRxConfig, Uhci},
+    },
 };
+use esp_rtos::embassy::Executor;
+use msh_esp_rs::{BBNotify, BbDmaRx};
+use static_cell::StaticCell;
 
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
@@ -25,6 +37,8 @@ fn panic(panic_info: &core::panic::PanicInfo) -> ! {
 }
 
 esp_bootloader_esp_idf::esp_app_desc!();
+
+static BB: Texas<4096, BBNotify> = Texas::new();
 
 #[allow(
     clippy::large_stack_frames,
@@ -62,37 +76,76 @@ async fn main(_spawner: Spawner) -> ! {
     let tx = peripherals.GPIO1;
     let rx = peripherals.GPIO2;
 
-    let mut uart = Uart::new(
+    let uart = Uart::new(
         peripherals.UART1,
         uart::Config::default()
-            .with_rx(
-                RxConfig::default(),
-            )
-            .with_clock_source(uart::ClockSource::Apb)
-            .with_baudrate(38400)
+            .with_rx(RxConfig::default())
+            .with_baudrate(38400),
     )
     .unwrap()
     .with_tx(tx)
     .with_rx(rx);
 
+    let mut uhci = Uhci::new(uart, peripherals.UHCI0, peripherals.DMA_CH0).into_async();
+    let _ = uhci.apply_rx_config(&UhciRxConfig::default().with_chunk_limit(5));
+
+    let (mut uhci_rx, _uhci_tx) = uhci.split();
+
+    static CORE_1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
+    let stack = CORE_1_STACK.init(Stack::new());
+
+    let trx = BB.stream_producer();
+    let drx = BB.stream_consumer();
+
+    esp_rtos::start_second_core(
+        peripherals.CPU_CTRL,
+        sw_interrupt.software_interrupt1,
+        stack,
+        move || {
+            static EXECUTOR: StaticCell<Executor> = StaticCell::new();
+            let executor = EXECUTOR.init(Executor::new());
+            // let mut delay: Delay = Delay::default();
+            // let mut epd = Epd2in13::new(&mut spi_device, bsy, dc, rst, &mut delay, None).unwrap();
+
+            executor.run(|spawner| {
+                // spawner.spawn(core_1_display(epd, spi_device).unwrap());
+                spawner.spawn(core_1_serial(drx).unwrap());
+            });
+        },
+    );
+
     info!("main loop starting...");
     loop {
-        let mut buf = [0u8; 128];
-        if uart.read_ready() {
-            info!("read ready...");
-            match uart.read(&mut buf) {
-                Ok(r) => {
-                    info!("Read: {}", r);
-                },
-                Err(e) => {
-                    error!("read error: {:?}", e);
-                    match uart.check_for_rx_errors() {
-                        Ok(_) => info!("error check: ok"),
-                        Err(e) => error!("error check: {:?}", e),
-                    }
-                }
-            }
-        }
+        let grant = trx.grant_max_remaining(1024).unwrap();
+        info!("obtained grant...");
+        let dma_rx = BbDmaRx::new(grant);
+        let mut transfer = uhci_rx.read(dma_rx).unwrap_or_else(|e| panic!("{:?}", e.0));
+        info!("dma read...");
+        transfer.wait_for_done().await;
+        info!("wait done...");
+        let (err, rx_back, finished) = transfer.wait();
+        info!("transfer done...");
+        uhci_rx = rx_back;
+        err.unwrap();
+
+        finished.commit();
+        info!("commit done...");
+        // let mut buf = [0u8; 128];
+        // if uart.read_ready() {
+        //     info!("read ready...");
+        //     match uart.read(&mut buf) {
+        //         Ok(r) => {
+        //             info!("Read: {}", r);
+        //         }
+        //         Err(e) => {
+        //             error!("read error: {:?}", e);
+        //             match uart.check_for_rx_errors() {
+        //                 Ok(_) => info!("error check: ok"),
+        //                 Err(e) => error!("error check: {:?}", e),
+        //             }
+        //         }
+        //     }
+        // }
 
         // if uart.write_ready() {
         //     mbuf[cursor] = b'|';
@@ -106,5 +159,22 @@ async fn main(_spawner: Spawner) -> ! {
         // }
         // tick.next().await;
         // cursor += 1;
+    }
+}
+
+type Cons = StreamConsumer<&'static BBQueue<Inline<4096>, AtomicCoord, BBNotify>>;
+#[embassy_executor::task]
+async fn core_1_serial(bbq: Cons) {
+    loop {
+        info!("core 1 loop starting...");
+        let grant = bbq.wait_read().await;
+        info!("core1 obtained grant");
+        match str::from_utf8(&grant) {
+            Ok(val) => info!("{}", val),
+
+            Err(_e) => {
+                error!("Decode err");
+            }
+        }
     }
 }
