@@ -86,9 +86,15 @@ async fn main(_spawner: Spawner) -> ! {
     .with_tx(tx)
     .with_rx(rx);
 
-    let mut uhci = Uhci::new(uart, peripherals.UHCI0, peripherals.DMA_CH0).into_async();
+    let mut uhci = Uhci::new(uart, peripherals.UHCI0, peripherals.DMA_CH0);
     let _ = uhci.apply_rx_config(&UhciRxConfig::default().with_chunk_limit(5));
 
+    let reg = unsafe { &*esp_hal::peripherals::UHCI0::PTR };
+    reg.conf0().modify(|_, w| {
+        w.seper_en().clear_bit().uart_idle_eof_en().set_bit()
+    });
+
+    let uhci = uhci.into_async();
     let (mut uhci_rx, _uhci_tx) = uhci.split();
 
     static CORE_1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
@@ -168,7 +174,7 @@ async fn core_1_serial(bbq: Cons) {
     loop {
         info!("core 1 loop starting...");
         let grant = bbq.wait_read().await;
-        info!("core1 obtained grant");
+        info!(">>>>>>>>>  core1 obtained grant");
         match str::from_utf8(&grant) {
             Ok(val) => info!("{}", val),
 
