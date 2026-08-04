@@ -19,6 +19,7 @@ use defmt::{debug, error, info};
 use embassy_executor::Spawner;
 use esp_hal::{
     clock::CpuClock,
+    dma::DmaDescriptor,
     system::Stack,
     timer::timg::TimerGroup,
     uart::{
@@ -38,6 +39,7 @@ fn panic(panic_info: &core::panic::PanicInfo) -> ! {
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
+static DMA_DESC: StaticCell<DmaDescriptor> = StaticCell::new();
 static BB: Texas<4096, BBNotify> = Texas::new();
 
 #[allow(
@@ -90,9 +92,8 @@ async fn main(_spawner: Spawner) -> ! {
     let _ = uhci.apply_rx_config(&UhciRxConfig::default().with_chunk_limit(5));
 
     let reg = unsafe { &*esp_hal::peripherals::UHCI0::PTR };
-    reg.conf0().modify(|_, w| {
-        w.seper_en().clear_bit().uart_idle_eof_en().set_bit()
-    });
+    reg.conf0()
+        .modify(|_, w| w.seper_en().clear_bit().uart_idle_eof_en().set_bit());
 
     let uhci = uhci.into_async();
     let (mut uhci_rx, _uhci_tx) = uhci.split();
@@ -120,11 +121,14 @@ async fn main(_spawner: Spawner) -> ! {
         },
     );
 
+    let descriptor = DMA_DESC.init(DmaDescriptor::EMPTY);
+    let mut desc = descriptor;
+
     info!("main loop starting...");
     loop {
         let grant = trx.grant_max_remaining(1024).unwrap();
         info!("obtained grant...");
-        let dma_rx = BbDmaRx::new(grant);
+        let dma_rx = BbDmaRx::new(grant, desc);
         let mut transfer = uhci_rx.read(dma_rx).unwrap_or_else(|e| panic!("{:?}", e.0));
         info!("dma read...");
         transfer.wait_for_done().await;
@@ -134,7 +138,7 @@ async fn main(_spawner: Spawner) -> ! {
         uhci_rx = rx_back;
         err.unwrap();
 
-        finished.commit();
+        desc = finished.commit();
         info!("commit done...");
         // let mut buf = [0u8; 128];
         // if uart.read_ready() {
@@ -171,10 +175,9 @@ async fn main(_spawner: Spawner) -> ! {
 type Cons = StreamConsumer<&'static BBQueue<Inline<4096>, AtomicCoord, BBNotify>>;
 #[embassy_executor::task]
 async fn core_1_serial(bbq: Cons) {
+    info!("core 1 loop starting...");
     loop {
-        info!("core 1 loop starting...");
         let grant = bbq.wait_read().await;
-        info!(">>>>>>>>>  core1 obtained grant");
         match str::from_utf8(&grant) {
             Ok(val) => info!("{}", val),
 
@@ -182,5 +185,7 @@ async fn core_1_serial(bbq: Cons) {
                 error!("Decode err");
             }
         }
+        let len = grant.len();
+        grant.release(len);
     }
 }

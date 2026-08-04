@@ -1,9 +1,6 @@
 #![no_std]
 
-use core::{
-    future::poll_fn,
-    task::Poll,
-};
+use core::{future::poll_fn, task::Poll};
 
 use bbqueue::{
     export::ConstInit,
@@ -13,6 +10,7 @@ use bbqueue::{
         notifier::{AsyncNotifier, Notifier},
     },
 };
+use defmt::info;
 use embassy_sync::waitqueue::AtomicWaker;
 use esp_hal::dma::{BurstConfig, DmaDescriptor, DmaRxBuffer, Preparation, TransferDirection};
 
@@ -101,21 +99,23 @@ impl AsyncNotifier for BBNotify {
 }
 
 pub struct BbDmaRx<P> {
-    descriptor: DmaDescriptor,
+    pub descriptor: &'static mut DmaDescriptor,
     grant: P,
 }
 
 impl<Q: BbqHandle> BbDmaRx<StreamGrantW<Q>> {
-    pub fn new(mut grant: StreamGrantW<Q>) -> Self {
-        let mut descriptor = DmaDescriptor::EMPTY;
+    pub fn new(mut grant: StreamGrantW<Q>, descriptor: &'static mut DmaDescriptor) -> Self {
+        *descriptor = DmaDescriptor::EMPTY;
         descriptor.buffer = grant.as_mut_ptr();
         descriptor.set_size(grant.len());
         descriptor.next = core::ptr::null_mut();
         Self { descriptor, grant }
     }
 
-    pub fn commit(self) {
+    pub fn commit(self) -> &'static mut DmaDescriptor {
+        info!("LEN: {}", self.descriptor.len());
         self.grant.commit(self.descriptor.len());
+        self.descriptor
     }
 }
 
@@ -125,12 +125,12 @@ unsafe impl<Q: BbqHandle> DmaRxBuffer for BbDmaRx<StreamGrantW<Q>> {
     fn prepare(&mut self) -> Preparation {
         self.descriptor.reset_for_rx();
         Preparation {
-            start: &mut self.descriptor as *mut DmaDescriptor,
+            start: self.descriptor as *mut DmaDescriptor,
             direction: TransferDirection::In,
             accesses_psram: false,
             burst_transfer: BurstConfig::DEFAULT,
             check_owner: None,
-            auto_write_back: false,
+            auto_write_back: true,
         }
     }
 
