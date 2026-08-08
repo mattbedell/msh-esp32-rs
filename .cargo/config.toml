@@ -1,15 +1,14 @@
 [target.xtensa-esp32s3-none-elf]
 runner = "probe-rs run --chip=esp32s3 --preverify --always-print-stacktrace --no-location"
-
-[env]
-DEFMT_LOG="info"
-
-[build]
 rustflags = [
   "-C", "link-arg=-nostartfiles",
 ]
 
-target = "xtensa-esp32s3-none-elf"
+[env]
+DEFMT_LOG="info"
 
 [unstable]
 build-std = ["core"]
+
+[alias]
+s3 = "run --release -p msh-esp-esp32s3 --target xtensa-esp32s3-none-elf"
