@@ -10,30 +10,23 @@ use bbqueue::{
         notifier::{AsyncNotifier, Notifier},
     },
 };
-use defmt::info;
 use embassy_sync::waitqueue::AtomicWaker;
 use esp_hal::dma::{BurstConfig, DmaDescriptor, DmaRxBuffer, Preparation, TransferDirection};
 
 struct Wakee {
     waker: AtomicWaker,
-    // flag: AtomicBool,
 }
 
 impl Wakee {
     pub const fn new() -> Wakee {
         Self {
             waker: AtomicWaker::new(),
-            // flag: AtomicBool::new(false),
         }
     }
 
     pub fn wake(&self) {
         self.waker.wake();
     }
-
-    // pub fn flag(&self) -> &AtomicBool {
-    //     &self.flag
-    // }
 }
 
 pub struct BBNotify {
@@ -80,11 +73,9 @@ impl ConstInit for BBNotify {
 
 impl Notifier for BBNotify {
     fn wake_one_consumer(&self) {
-        // self.read.flag.store(true, Ordering::Release);
         self.read.wake();
     }
     fn wake_one_producer(&self) {
-        // self.write.flag.store(true, Ordering::Release);
         self.write.wake();
     }
 }
@@ -113,7 +104,6 @@ impl<Q: BbqHandle> BbDmaRx<StreamGrantW<Q>> {
     }
 
     pub fn commit(self) -> &'static mut DmaDescriptor {
-        info!("LEN: {}", self.descriptor.len());
         self.grant.commit(self.descriptor.len());
         self.descriptor
     }

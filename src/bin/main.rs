@@ -140,35 +140,6 @@ async fn main(_spawner: Spawner) -> ! {
 
         desc = finished.commit();
         info!("commit done...");
-        // let mut buf = [0u8; 128];
-        // if uart.read_ready() {
-        //     info!("read ready...");
-        //     match uart.read(&mut buf) {
-        //         Ok(r) => {
-        //             info!("Read: {}", r);
-        //         }
-        //         Err(e) => {
-        //             error!("read error: {:?}", e);
-        //             match uart.check_for_rx_errors() {
-        //                 Ok(_) => info!("error check: ok"),
-        //                 Err(e) => error!("error check: {:?}", e),
-        //             }
-        //         }
-        //     }
-        // }
-
-        // if uart.write_ready() {
-        //     mbuf[cursor] = b'|';
-        //     match uart.write(&mbuf[..cursor]) {
-        //         Ok(r) => {
-        //             info!("sent: {}", r);
-        //             let _ = uart.flush();
-        //         },
-        //         Err(err) => error!("tx err: {:?}", err),
-        //     }
-        // }
-        // tick.next().await;
-        // cursor += 1;
     }
 }
 
