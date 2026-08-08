@@ -1,4 +1,5 @@
--- You must enable the exrc setting in neovim for this config file to be used.
+-- NOTE: Manually change targeted chip variant here so LS works
+-- NOTE: Enable nvim exrc and :trust
 local rust_analyzer = {
     cargo = {
         target = "xtensa-esp32s3-none-elf",
