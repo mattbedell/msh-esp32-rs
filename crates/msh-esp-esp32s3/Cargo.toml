@@ -1,0 +1,6 @@
+[package]
+name = "msh-esp-esp32s3"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]

@@ -4,6 +4,10 @@ name         = "msh-esp-rs"
 rust-version = "1.88"
 version      = "0.1.0"
 
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
 [[bin]]
 name = "msh-esp-rs"
 path = "./src/bin/main.rs"

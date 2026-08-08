@@ -1285,6 +1285,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "msh-esp-core"
+version = "0.1.0"
+
+[[package]]
+name = "msh-esp-esp32s3"
+version = "0.1.0"
+
+[[package]]
 name = "msh-esp-rs"
 version = "0.1.0"
 dependencies = [
