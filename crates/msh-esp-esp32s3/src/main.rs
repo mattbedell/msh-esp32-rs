@@ -28,7 +28,7 @@ use esp_hal::{
     },
 };
 use esp_rtos::embassy::Executor;
-use msh_esp_rs::{BBNotify, BbDmaRx};
+use msh_esp_core::{BBNotify, BbDmaRx};
 use static_cell::StaticCell;
 
 #[panic_handler]

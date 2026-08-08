@@ -1287,13 +1287,15 @@ dependencies = [
 [[package]]
 name = "msh-esp-core"
 version = "0.1.0"
+dependencies = [
+ "bbqueue",
+ "embassy-sync 0.8.0",
+ "esp-hal",
+ "micropb-gen",
+]
 
 [[package]]
 name = "msh-esp-esp32s3"
-version = "0.1.0"
-
-[[package]]
-name = "msh-esp-rs"
 version = "0.1.0"
 dependencies = [
  "bbqueue",
@@ -1310,7 +1312,7 @@ dependencies = [
  "esp-rtos",
  "heapless 0.9.3",
  "micropb 0.6.0",
- "micropb-gen",
+ "msh-esp-core",
  "panic-rtt-target",
  "rtt-target",
  "static_cell",

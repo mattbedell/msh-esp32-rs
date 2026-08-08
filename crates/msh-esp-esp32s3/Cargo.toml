@@ -1,6 +1,25 @@
 [package]
 name = "msh-esp-esp32s3"
-version = "0.1.0"
-edition = "2024"
+rust-version = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
 
 [dependencies]
+esp-hal = { workspace = true, features = ["defmt", "esp32s3"] }
+esp-rtos = { workspace = true, features = ["defmt", "esp32s3"] }
+esp-bootloader-esp-idf = { workspace = true, features = ["defmt", "esp32s3"] }
+defmt                  = "1.0.1"
+embassy-executor = { workspace = true, features = ["defmt"] }
+embassy-time     = { workspace = true, features = ["defmt"] }
+panic-rtt-target = { workspace = true, features = ["defmt"] }
+rtt-target       = { workspace = true, features = ["defmt"] }
+critical-section = { workspace = true }
+static_cell      = { workspace = true }
+epd-waveshare = { workspace = true }
+embedded-hal-bus = { workspace = true }
+embedded-graphics = { workspace = true }
+bbqueue = { workspace = true }
+embassy-sync = { workspace = true }
+micropb = { workspace = true }
+heapless = { workspace = true }
+msh-esp-core = { version = "0.1.0", path = "../msh-esp-core" }

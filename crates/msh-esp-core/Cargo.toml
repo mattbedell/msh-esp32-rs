@@ -1,6 +1,13 @@
 [package]
 name = "msh-esp-core"
-version = "0.1.0"
-edition = "2024"
+rust-version = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
 
 [dependencies]
+esp-hal = { workspace = true }
+bbqueue = { workspace = true }
+embassy-sync = { workspace = true }
+
+[build-dependencies]
+micropb-gen = "0.3.0"
