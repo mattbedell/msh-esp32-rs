@@ -5,10 +5,10 @@ rustflags = [
 ]
 
 [env]
+MESHTASTIC_PROTO_VERSION="v2.7.26"
 DEFMT_LOG="info"
-
-[unstable]
-build-std = ["core"]
+CARGO_WORKSPACE_DIR = { value = "", relative = true }
 
 [alias]
-s3 = "run --release -p msh-esp-esp32s3 --target xtensa-esp32s3-none-elf"
+s3 = "run --release -p msh-esp-esp32s3 --target xtensa-esp32s3-none-elf -Zbuild-std=core"
+xtask = "run --package xtask --"
