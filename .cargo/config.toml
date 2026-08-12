@@ -5,9 +5,10 @@ rustflags = [
 ]
 
 [env]
-MESHTASTIC_PROTO_VERSION="v2.7.26"
 DEFMT_LOG="info"
 CARGO_WORKSPACE_DIR = { value = "", relative = true }
+MESHTASTIC_PROTOS_DIR="meshtastic_protobufs"
+MESHTASTIC_PROTOS_VERSION="v2.7.26"
 
 [alias]
 s3 = "run --release -p msh-esp-esp32s3 --target xtensa-esp32s3-none-elf -Zbuild-std=core"

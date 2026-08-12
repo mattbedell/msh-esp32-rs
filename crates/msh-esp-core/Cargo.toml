@@ -8,6 +8,8 @@ edition = { workspace = true }
 esp-hal = { workspace = true }
 bbqueue = { workspace = true }
 embassy-sync = { workspace = true }
+micropb = { workspace = true }
+heapless = { workspace = true }
 
 [build-dependencies]
-micropb-gen = "0.3.0"
+micropb-gen = "0.6.0"

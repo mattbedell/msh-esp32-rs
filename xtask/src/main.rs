@@ -20,8 +20,13 @@ fn main() -> ExitCode {
 
 fn run() -> Result<()> {
     let task = std::env::args().nth(1).unwrap_or_default();
-    let workspace_dir =
-        std::env::var("CARGO_WORKSPACE_DIR").map(PathBuf::from).expect("'CARGO_WORKSPACE_DIR' must be set");
+    let workspace_dir = std::env::var("CARGO_WORKSPACE_DIR")
+        .map(PathBuf::from)
+        .expect("'CARGO_WORKSPACE_DIR' must be set");
+
+    let meshtastic_protos_dir = std::env::var("MESHTASTIC_PROTOS_DIR")
+        .map(|s| workspace_dir.join(s))
+        .expect("'MESHTASTIC_PROTOS_DIR' must be set");
 
     match task.as_str() {
         "proto:install" => {
@@ -35,17 +40,17 @@ fn run() -> Result<()> {
                         format!("v{ver}")
                     }
                 })
-                .or_else(|| std::env::var("MESHTASTIC_PROTO_VERSION").ok())
+                .or_else(|| std::env::var("MESHTASTIC_PROTOS_VERSION").ok())
                 .ok_or_else(|| anyhow!("Meshtastic protobuf version must be provided"))?;
 
-            prepare_protos(&workspace_dir, &proto_tag)?;
+            prepare_protos(&workspace_dir, &meshtastic_protos_dir, &proto_tag)?;
             Ok(())
         }
         _ => Err(anyhow!("unrecognized xtask")),
     }
 }
 
-fn prepare_protos(workspace_dir: &Path, tag: &str) -> Result<()> {
+fn prepare_protos(workspace_dir: &Path, meshtastic_protos_dir: &Path, tag: &str) -> Result<()> {
     let mut meshtastic_protos_dir = PathBuf::from(&workspace_dir);
     meshtastic_protos_dir.push(MESHTASTIC_PROTOS_DIR);
     checkout_protos(workspace_dir, &meshtastic_protos_dir, tag)?;
@@ -91,12 +96,14 @@ fn parse_static_settings(workspace_dir: &Path, meshtastic_dir: &Path) -> Result<
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap();
         let proto_path = proto_dir.join(format!("{stem}.proto"));
 
-        let _ = Command::new("protoc").args([
-            format!("--proto_path={}", proto_dir.display()),
-            format!("--proto_path={}", meshtastic_dir.display()),
-            format!("--descriptor_set_out={}", desc.path().display()),
-            proto_path.to_str().unwrap().to_string(),
-        ]).status()?;
+        let _ = Command::new("protoc")
+            .args([
+                format!("--proto_path={}", proto_dir.display()),
+                format!("--proto_path={}", meshtastic_dir.display()),
+                format!("--descriptor_set_out={}", desc.path().display()),
+                proto_path.to_str().unwrap().to_string(),
+            ])
+            .status()?;
 
         let out = fs::read(desc.path())?;
         let fd_set = FileDescriptorSet::decode(&out[..])?;
