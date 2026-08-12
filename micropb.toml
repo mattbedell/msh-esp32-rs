@@ -1,0 +1,779 @@
+#### !!!!! GENERATED NO EDIT !!!!!
+#### run 'cargo xtask proto:install' to generate
+
+["AdminMessage.InputEvent.event_code"]
+int_size = "S8"
+
+["AdminMessage.InputEvent.kb_char"]
+int_size = "S8"
+
+["AdminMessage.InputEvent.touch_x"]
+int_size = "S16"
+
+["AdminMessage.InputEvent.touch_y"]
+int_size = "S16"
+
+["AdminMessage.OTAEvent.ota_hash"]
+max_bytes = 32
+
+["AdminMessage.delete_file_request"]
+max_bytes = 201
+
+["AdminMessage.get_canned_message_module_messages_response"]
+max_bytes = 201
+
+["AdminMessage.get_ringtone_response"]
+max_bytes = 231
+
+["AdminMessage.session_passkey"]
+max_bytes = 8
+
+["AdminMessage.set_canned_message_module_messages"]
+max_bytes = 201
+
+["AdminMessage.set_ringtone_message"]
+max_bytes = 231
+
+["AircraftTrack.aircraft_type"]
+max_bytes = 8
+
+["AircraftTrack.category"]
+max_bytes = 4
+
+["AircraftTrack.cot_host_id"]
+max_bytes = 64
+
+["AircraftTrack.flight"]
+max_bytes = 16
+
+["AircraftTrack.icao"]
+max_bytes = 8
+
+["AircraftTrack.registration"]
+max_bytes = 16
+
+["AircraftTrack.squawk"]
+int_size = "S16"
+
+["CannedMessageModuleConfig.messages"]
+max_bytes = 201
+
+["CasevacReport.ambulatory_patients"]
+int_size = "S8"
+
+["CasevacReport.child"]
+int_size = "S8"
+
+["CasevacReport.epw"]
+int_size = "S8"
+
+["CasevacReport.equipment_flags"]
+int_size = "S8"
+
+["CasevacReport.frequency"]
+max_bytes = 16
+
+["CasevacReport.litter_patients"]
+int_size = "S8"
+
+["CasevacReport.non_us_civilian"]
+int_size = "S8"
+
+["CasevacReport.non_us_military"]
+int_size = "S8"
+
+["CasevacReport.terrain_flags"]
+int_size = "S8"
+
+["CasevacReport.us_civilian"]
+int_size = "S8"
+
+["CasevacReport.us_military"]
+int_size = "S8"
+
+["CasevacReport.zone_marker"]
+max_bytes = 16
+
+["Channel.index"]
+int_size = "S8"
+
+["ChannelFile.channels"]
+max_len = 8
+
+["ChannelSet.settings"]
+max_len = 8
+
+["ChannelSettings.name"]
+max_bytes = 12
+
+["ChannelSettings.psk"]
+max_bytes = 32
+
+["ChunkedPayload.chunk_count"]
+int_size = "S16"
+
+["ChunkedPayload.chunk_index"]
+int_size = "S16"
+
+["ChunkedPayload.payload_chunk"]
+max_bytes = 228
+
+["ChunkedPayload.payload_id"]
+max_bytes = 16
+
+["ChunkedPayloadResponse.payload_id"]
+max_bytes = 16
+
+["ClientNotification._reply_id"]
+max_bytes = 16
+
+["ClientNotification.duplicated_public_key"]
+max_bytes = 32
+
+["ClientNotification.message"]
+max_bytes = 400
+
+["ClientNotification.reply_id"]
+max_bytes = 16
+
+["Compressed.data"]
+max_bytes = 233
+
+["Config.DeviceConfig.buzzer_mode"]
+int_size = "S8"
+
+["Config.DeviceConfig.tzdef"]
+max_bytes = 65
+
+["Config.LoRaConfig.bandwidth"]
+int_size = "S16"
+
+["Config.LoRaConfig.channel_num"]
+int_size = "S16"
+
+["Config.LoRaConfig.coding_rate"]
+int_size = "S8"
+
+["Config.LoRaConfig.ignore_incoming"]
+max_len = 3
+
+["Config.LoRaConfig.tx_power"]
+int_size = "S8"
+
+["Config.NetworkConfig.ntp_server"]
+max_bytes = 33
+
+["Config.NetworkConfig.rsyslog_server"]
+max_bytes = 33
+
+["Config.NetworkConfig.wifi_psk"]
+max_bytes = 65
+
+["Config.NetworkConfig.wifi_ssid"]
+max_bytes = 33
+
+["Config.PowerConfig.device_battery_ina_address"]
+int_size = "S8"
+
+["Config.SecurityConfig.admin_key"]
+max_bytes = 32
+max_len = 3
+
+["Config.SecurityConfig.private_key"]
+max_bytes = 32
+
+["Config.SecurityConfig.public_key"]
+max_bytes = 32
+
+["Contact.callsign"]
+max_bytes = 120
+
+["Contact.device_callsign"]
+max_bytes = 120
+
+["CotGeoPoint.lat_delta_i"]
+int_size = "S32"
+
+["CotGeoPoint.lon_delta_i"]
+int_size = "S32"
+
+["Data.bitfield"]
+int_size = "S8"
+
+["Data.payload"]
+max_bytes = 233
+
+["Data.reply_id"]
+max_bytes = 16
+
+["Data.request_id"]
+max_bytes = 16
+
+["DeviceMetadata.firmware_version"]
+max_bytes = 18
+
+["DeviceProfile.canned_messages"]
+max_bytes = 201
+
+["DeviceProfile.long_name"]
+max_bytes = 40
+
+["DeviceProfile.ringtone"]
+max_bytes = 231
+
+["DeviceProfile.short_name"]
+max_bytes = 5
+
+["DeviceState.node_remote_hardware_pins"]
+max_len = 12
+
+["DeviceState.receive_queue"]
+max_len = 1
+
+["DeviceUIConfig.calibration_data"]
+max_bytes = 16
+
+["DeviceUIConfig.compass_mode"]
+int_size = "S8"
+
+["DeviceUIConfig.gps_format"]
+int_size = "S8"
+
+["DeviceUIConfig.ring_tone_id"]
+int_size = "S8"
+
+["DeviceUIConfig.screen_brightness"]
+int_size = "S8"
+
+["DeviceUIConfig.screen_timeout"]
+int_size = "S16"
+
+["DrawnShape.angle_deg"]
+int_size = "S16"
+
+["DrawnShape.bullseye_bearing_ref"]
+int_size = "S8"
+
+["DrawnShape.bullseye_distance_dm"]
+int_size = "S32"
+
+["DrawnShape.bullseye_flags"]
+int_size = "S8"
+
+["DrawnShape.bullseye_uid_ref"]
+max_bytes = 48
+
+["DrawnShape.major_cm"]
+int_size = "S32"
+
+["DrawnShape.minor_cm"]
+int_size = "S32"
+
+["DrawnShape.stroke_weight_x10"]
+int_size = "S16"
+
+["EmergencyAlert.authoring_uid"]
+max_bytes = 48
+
+["EmergencyAlert.cancel_reference_uid"]
+max_bytes = 48
+
+["EnvironmentMetrics.iaq"]
+int_size = "S16"
+
+["EnvironmentMetrics.one_wire_temperature"]
+max_len = 8
+
+["EnvironmentMetrics.soil_moisture"]
+int_size = "S8"
+
+["EnvironmentMetrics.wind_direction"]
+int_size = "S16"
+
+["FileInfo.file_name"]
+max_bytes = 228
+
+["FromRadio.config_complete_id"]
+max_bytes = 16
+
+["FromRadio.id"]
+max_bytes = 16
+
+["GeoChat.message"]
+max_bytes = 200
+
+["GeoChat.receipt_for_uid"]
+max_bytes = 48
+
+["GeoChat.to"]
+max_bytes = 120
+
+["GeoChat.to_callsign"]
+max_bytes = 120
+
+["GeoPoint.zoom"]
+int_size = "S8"
+
+["HamParameters.call_sign"]
+max_bytes = 8
+
+["HamParameters.short_name"]
+max_bytes = 5
+
+["HealthMetrics.heart_bpm"]
+int_size = "S8"
+
+["HealthMetrics.spO2"]
+int_size = "S8"
+
+["HostMetrics.load1"]
+int_size = "S16"
+
+["HostMetrics.load15"]
+int_size = "S16"
+
+["HostMetrics.load5"]
+int_size = "S16"
+
+["HostMetrics.user_string"]
+max_bytes = 200
+
+["InterdeviceMessage.nmea"]
+max_bytes = 1024
+
+["KeyVerification.hash1"]
+max_bytes = 32
+
+["KeyVerification.hash2"]
+max_bytes = 32
+
+["KeyVerificationFinal.remote_longname"]
+max_bytes = 40
+
+["KeyVerificationFinal.verification_characters"]
+max_bytes = 10
+
+["KeyVerificationNumberInform.remote_longname"]
+max_bytes = 40
+
+["KeyVerificationNumberRequest.remote_longname"]
+max_bytes = 40
+
+["LocalStats.num_online_nodes"]
+int_size = "S16"
+
+["LocalStats.num_total_nodes"]
+int_size = "S16"
+
+["LocalStats.num_tx_dropped"]
+int_size = "S16"
+
+["LockdownAuth.passphrase"]
+max_bytes = 32
+
+["LockdownStatus.lock_reason"]
+max_bytes = 32
+
+["LogRecord.message"]
+max_bytes = 384
+
+["LogRecord.source"]
+max_bytes = 32
+
+["Map.style"]
+max_bytes = 20
+
+["MapReport.firmware_version"]
+max_bytes = 18
+
+["MapReport.long_name"]
+max_bytes = 40
+
+["MapReport.num_online_local_nodes"]
+int_size = "S16"
+
+["MapReport.short_name"]
+max_bytes = 5
+
+["Marker.iconset"]
+max_bytes = 80
+
+["Marker.parent_callsign"]
+max_bytes = 24
+
+["Marker.parent_type"]
+max_bytes = 24
+
+["Marker.parent_uid"]
+max_bytes = 48
+
+["MeshPacket.channel"]
+int_size = "S8"
+
+["MeshPacket.encrypted"]
+max_bytes = 256
+
+["MeshPacket.hop_limit"]
+int_size = "S8"
+
+["MeshPacket.hop_start"]
+int_size = "S8"
+
+["MeshPacket.id"]
+max_bytes = 16
+
+["MeshPacket.next_hop"]
+int_size = "S8"
+
+["MeshPacket.public_key"]
+max_bytes = 32
+
+["MeshPacket.relay_node"]
+int_size = "S8"
+
+["ModuleConfig.AmbientLightingConfig.blue"]
+int_size = "S8"
+
+["ModuleConfig.AmbientLightingConfig.current"]
+int_size = "S8"
+
+["ModuleConfig.AmbientLightingConfig.green"]
+int_size = "S8"
+
+["ModuleConfig.AmbientLightingConfig.red"]
+int_size = "S8"
+
+["ModuleConfig.AudioConfig.i2s_din"]
+int_size = "S8"
+
+["ModuleConfig.AudioConfig.i2s_sck"]
+int_size = "S8"
+
+["ModuleConfig.AudioConfig.i2s_sd"]
+int_size = "S8"
+
+["ModuleConfig.AudioConfig.i2s_ws"]
+int_size = "S8"
+
+["ModuleConfig.AudioConfig.ptt_pin"]
+int_size = "S8"
+
+["ModuleConfig.CannedMessageConfig.allow_input_source"]
+max_bytes = 16
+
+["ModuleConfig.DetectionSensorConfig.detection_trigger_type"]
+max_bytes = 8
+
+["ModuleConfig.DetectionSensorConfig.monitor_pin"]
+int_size = "S8"
+
+["ModuleConfig.DetectionSensorConfig.name"]
+max_bytes = 20
+
+["ModuleConfig.ExternalNotificationConfig.nag_timeout"]
+int_size = "S16"
+
+["ModuleConfig.ExternalNotificationConfig.output_buzzer"]
+int_size = "S8"
+
+["ModuleConfig.ExternalNotificationConfig.output_vibra"]
+int_size = "S8"
+
+["ModuleConfig.MQTTConfig.address"]
+max_bytes = 64
+
+["ModuleConfig.MQTTConfig.password"]
+max_bytes = 32
+
+["ModuleConfig.MQTTConfig.root"]
+max_bytes = 32
+
+["ModuleConfig.MQTTConfig.username"]
+max_bytes = 64
+
+["ModuleConfig.RemoteHardwareConfig.available_pins"]
+max_len = 4
+
+["ModuleConfig.StatusMessageConfig.node_status"]
+max_bytes = 80
+
+["MqttClientProxyMessage.data"]
+max_bytes = 435
+
+["MqttClientProxyMessage.text"]
+max_bytes = 435
+
+["MqttClientProxyMessage.topic"]
+max_bytes = 60
+
+["MyNodeInfo.device_id"]
+max_bytes = 16
+
+["MyNodeInfo.firmware_edition"]
+int_size = "S8"
+
+["MyNodeInfo.nodedb_count"]
+int_size = "S16"
+
+["MyNodeInfo.pio_env"]
+max_bytes = 40
+
+["Neighbor.node_id"]
+max_bytes = 16
+
+["NeighborInfo.last_sent_by_id"]
+max_bytes = 16
+
+["NeighborInfo.neighbors"]
+max_len = 10
+
+["NeighborInfo.node_id"]
+max_bytes = 16
+
+["NodeFilter.channel"]
+int_size = "S8"
+
+["NodeFilter.hops_away"]
+int_size = "S8"
+
+["NodeFilter.node_name"]
+max_bytes = 16
+
+["NodeHighlight.node_name"]
+max_bytes = 16
+
+["NodeInfo.channel"]
+int_size = "S8"
+
+["NodeInfo.hops_away"]
+int_size = "S8"
+
+["NodeInfoLite.channel"]
+int_size = "S8"
+
+["NodeInfoLite.hops_away"]
+int_size = "S8"
+
+["NodeInfoLite.next_hop"]
+int_size = "S8"
+
+["NodeRemoteHardwarePinsResponse.node_remote_hardware_pins"]
+max_len = 16
+
+["PLI.course"]
+int_size = "S16"
+
+["Position.sensor_id"]
+max_bytes = 16
+
+["QueueStatus.free"]
+int_size = "S8"
+
+["QueueStatus.maxlen"]
+int_size = "S8"
+
+["QueueStatus.mesh_packet_id"]
+max_bytes = 16
+
+["QueueStatus.res"]
+int_size = "S8"
+
+["RTTTLConfig.ringtone"]
+max_bytes = 231
+
+["RangeAndBearing.anchor_uid"]
+max_bytes = 48
+
+["RangeAndBearing.bearing_cdeg"]
+int_size = "S16"
+
+["RangeAndBearing.range_cm"]
+int_size = "S32"
+
+["RangeAndBearing.stroke_weight_x10"]
+int_size = "S16"
+
+["RemoteHardwarePin.gpio_pin"]
+int_size = "S8"
+
+["RemoteHardwarePin.name"]
+max_bytes = 15
+
+["RemoteShell.payload"]
+max_bytes = 200
+
+["RemoteShell.session_id"]
+max_bytes = 16
+
+["Route.Link.callsign"]
+max_bytes = 16
+
+["Route.Link.link_type"]
+int_size = "S8"
+
+["Route.Link.uid"]
+max_bytes = 48
+
+["Route.links"]
+max_len = 16
+
+["Route.prefix"]
+max_bytes = 8
+
+["Route.stroke_weight_x10"]
+int_size = "S16"
+
+["RouteDiscovery.route"]
+max_len = 8
+
+["RouteDiscovery.route_back"]
+max_len = 8
+
+["RouteDiscovery.snr_back"]
+int_size = "S8"
+max_len = 8
+
+["RouteDiscovery.snr_towards"]
+int_size = "S8"
+max_len = 8
+
+["SerialHalCommand.data"]
+max_bytes = 512
+
+["SerialHalResponse.data"]
+max_bytes = 512
+
+["SerialHalResponse.error"]
+max_bytes = 80
+
+["Status.battery"]
+int_size = "S8"
+
+["StatusMessage.status"]
+max_bytes = 80
+
+["StoreAndForward.text"]
+max_bytes = 233
+
+["StoreForwardPlusPlus.commit_hash"]
+max_bytes = 32
+
+["StoreForwardPlusPlus.encapsulated_id"]
+max_bytes = 16
+
+["StoreForwardPlusPlus.message"]
+max_bytes = 240
+
+["StoreForwardPlusPlus.message_hash"]
+max_bytes = 32
+
+["StoreForwardPlusPlus.root_hash"]
+max_bytes = 32
+
+["TAKPacket.detail"]
+max_bytes = 220
+
+["TAKPacketV2.battery"]
+int_size = "S8"
+
+["TAKPacketV2.callsign"]
+max_bytes = 120
+
+["TAKPacketV2.cot_type_str"]
+max_bytes = 32
+
+["TAKPacketV2.course"]
+int_size = "S16"
+
+["TAKPacketV2.device_callsign"]
+max_bytes = 120
+
+["TAKPacketV2.endpoint"]
+max_bytes = 32
+
+["TAKPacketV2.phone"]
+max_bytes = 20
+
+["TAKPacketV2.raw_detail"]
+max_bytes = 220
+
+["TAKPacketV2.stale_seconds"]
+int_size = "S16"
+
+["TAKPacketV2.tak_device"]
+max_bytes = 32
+
+["TAKPacketV2.tak_os"]
+max_bytes = 16
+
+["TAKPacketV2.tak_platform"]
+max_bytes = 32
+
+["TAKPacketV2.tak_version"]
+max_bytes = 64
+
+["TAKPacketV2.uid"]
+max_bytes = 48
+
+["TaskRequest.assignee_uid"]
+max_bytes = 32
+
+["TaskRequest.note"]
+max_bytes = 48
+
+["TaskRequest.target_uid"]
+max_bytes = 32
+
+["TaskRequest.task_type"]
+max_bytes = 12
+
+["ToRadio.want_config_id"]
+max_bytes = 16
+
+["User.id"]
+max_bytes = 16
+
+["User.long_name"]
+max_bytes = 40
+
+["User.macaddr"]
+max_bytes = 6
+
+["User.public_key"]
+max_bytes = 32
+
+["User.short_name"]
+max_bytes = 5
+
+["UserLite.long_name"]
+max_bytes = 40
+
+["UserLite.macaddr"]
+max_bytes = 6
+
+["UserLite.public_key"]
+max_bytes = 32
+
+["UserLite.short_name"]
+max_bytes = 5
+
+["Waypoint.description"]
+max_bytes = 100
+
+["Waypoint.id"]
+max_bytes = 16
+
+["Waypoint.name"]
+max_bytes = 30
+
+["WifiConnectionStatus.ssid"]
+max_bytes = 33
+
+["XModem.buffer"]
+max_bytes = 128
+
+["XModem.crc16"]
+int_size = "S16"
+
+["XModem.seq"]
+int_size = "S16"

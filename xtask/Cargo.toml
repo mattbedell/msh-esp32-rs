@@ -6,6 +6,7 @@ version = "0.1.0"
 
 [dependencies]
 anyhow = "1.0.104"
+glob-match = "0.2.1"
 prost = "0.14.4"
 prost-types = "0.14.4"
 tempfile = "3.27.0"
