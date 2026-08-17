@@ -28,7 +28,7 @@ use esp_hal::{
     },
 };
 use esp_rtos::embassy::Executor;
-use msh_esp_core::{BBNotify, BbDmaRx};
+use msh_esp_core::bbqueue::{Notify, DmaRx};
 use static_cell::StaticCell;
 
 #[panic_handler]
@@ -40,7 +40,7 @@ fn panic(panic_info: &core::panic::PanicInfo) -> ! {
 esp_bootloader_esp_idf::esp_app_desc!();
 
 static DMA_DESC: StaticCell<DmaDescriptor> = StaticCell::new();
-static BB: Texas<4096, BBNotify> = Texas::new();
+static BB: Texas<4096, Notify> = Texas::new();
 
 #[allow(
     clippy::large_stack_frames,
@@ -128,7 +128,7 @@ async fn main(_spawner: Spawner) -> ! {
     loop {
         let grant = trx.grant_max_remaining(1024).unwrap();
         info!("obtained grant...");
-        let dma_rx = BbDmaRx::new(grant, desc);
+        let dma_rx = DmaRx::new(grant, desc);
         let mut transfer = uhci_rx.read(dma_rx).unwrap_or_else(|e| panic!("{:?}", e.0));
         info!("dma read...");
         transfer.wait_for_done().await;
@@ -143,7 +143,7 @@ async fn main(_spawner: Spawner) -> ! {
     }
 }
 
-type Cons = StreamConsumer<&'static BBQueue<Inline<4096>, AtomicCoord, BBNotify>>;
+type Cons = StreamConsumer<&'static BBQueue<Inline<4096>, AtomicCoord, Notify>>;
 #[embassy_executor::task]
 async fn core_1_serial(bbq: Cons) {
     info!("core 1 loop starting...");
