@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use micropb_gen::Generator;
+use micropb_gen::{Config, Generator};
 
 fn main() {
     let workspace_dir = std::env::var("CARGO_WORKSPACE_DIR")
@@ -11,6 +11,10 @@ fn main() {
         .expect("'MESHTASTIC_PROTOS_DIR' must be set");
 
     let meshtastic_protos_dir = meshtastic_repo_dir.join("meshtastic");
+    let micropb_cfg = workspace_dir.join("micropb.toml");
+
+    println!("cargo::rerun-if-changed={}", micropb_cfg.display());
+    println!("cargo::rerun-if-env-changed=MESHTASTIC_PROTOS_VERSION");
 
     let out_file = std::env::var("OUT_DIR")
         .map(|s| {
@@ -20,10 +24,12 @@ fn main() {
         })
         .unwrap();
 
-    let micropb_cfg = workspace_dir.join("micropb.toml");
-
     let mut generator = Generator::new();
     generator.use_container_heapless();
+    // Meshtastic doesn't statically size all fields, so set large defaults at first
+    // firmware's MAX_TO_FROM_RADIO_SIZE=512 in PhoneApi.h, probably a reasonable upper bound on total msg size
+    // @todo: get fields not covered by *.options files and analyze real traffic to set field-level sizes myself
+    generator.configure(".", Config::new().max_bytes(256).max_len(16));
     generator
         .parse_config_file(&micropb_cfg, ".meshtastic")
         .unwrap();

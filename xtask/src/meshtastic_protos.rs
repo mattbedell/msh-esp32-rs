@@ -131,6 +131,7 @@ pub fn parse_static_settings(
         let Some("options") = path.extension().and_then(|s| s.to_str()) else {
             continue;
         };
+
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap();
         let proto_path = proto_dir.join(format!("{stem}.proto"));
 
