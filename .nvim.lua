@@ -6,6 +6,7 @@ local rust_analyzer = {
         allTargets = false,
     },
     check = {
+      extraArgs = { "-Zbuild-std=core" },
       targets = { "xtensa-esp32s3-none-elf" },
     },
     rustcSource = "discover",
