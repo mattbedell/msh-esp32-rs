@@ -28,7 +28,10 @@ use esp_hal::{
     },
 };
 use esp_rtos::embassy::Executor;
-use msh_esp_core::bbqueue::{Notify, DmaRx};
+use msh_esp_core::{
+    bbqueue::{Notify, DmaRx},
+    serial,
+};
 use static_cell::StaticCell;
 
 #[panic_handler]
