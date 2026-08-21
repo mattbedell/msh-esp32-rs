@@ -4,12 +4,19 @@ rust-version = { workspace = true }
 version = { workspace = true }
 edition = { workspace = true }
 
+[features]
+default = []
+defmt = ["dep:defmt"]
+log = ["dep:log"]
+
 [dependencies]
 esp-hal = { workspace = true }
 bbqueue = { workspace = true }
 embassy-sync = { workspace = true }
 micropb = { workspace = true }
 heapless = { workspace = true }
+defmt = { version = "1.1.1", optional = true }
+log = { version = "0.4.33", optional = true }
 
 [build-dependencies]
 micropb-gen = "0.6.0"

@@ -1,6 +1,7 @@
 #![no_std]
 
 pub mod bbqueue;
+mod logger;
 pub mod serial;
 
 mod proto {
