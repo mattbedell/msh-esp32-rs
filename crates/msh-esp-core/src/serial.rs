@@ -2,7 +2,7 @@ use core::str::Utf8Error;
 
 use micropb::{MessageDecode, MessageEncode};
 
-use crate::proto::MeshPacket;
+use crate::proto::FromRadio;
 use defmt;
 
 const START1: u8 = 0x94;
@@ -159,7 +159,7 @@ impl MeshtasticFrame {
 
                     if take == rest {
                         // collected full protobuf, decode
-                        let mut packet = MeshPacket::default();
+                        let mut packet = FromRadio::default();
                         let _ = packet
                             .decode_from_bytes(&self.proto_buf[..tail])
                             .inspect_err(|_err| {
