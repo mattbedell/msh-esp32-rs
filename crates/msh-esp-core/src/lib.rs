@@ -4,7 +4,7 @@ pub mod bbqueue;
 mod logger;
 pub mod serial;
 
-mod proto {
+pub mod proto {
     mod proto_gen {
         #![allow(clippy::all)]
         #![allow(nonstandard_style, unused, irrefutable_let_patterns)]
