@@ -130,14 +130,10 @@ async fn main(_spawner: Spawner) -> ! {
     info!("main loop starting...");
     loop {
         let grant = trx.grant_max_remaining(1024).unwrap();
-        info!("obtained grant...");
         let dma_rx = DmaRx::new(grant, desc);
         let mut transfer = uhci_rx.read(dma_rx).unwrap_or_else(|e| panic!("{:?}", e.0));
-        info!("dma read...");
         transfer.wait_for_done().await;
-        info!("wait done...");
         let (err, rx_back, finished) = transfer.wait();
-        info!("transfer done...");
         uhci_rx = rx_back;
         err.unwrap();
 
@@ -149,17 +145,25 @@ async fn main(_spawner: Spawner) -> ! {
 type Cons = StreamConsumer<&'static BBQueue<Inline<4096>, AtomicCoord, Notify>>;
 #[embassy_executor::task]
 async fn core_1_serial(bbq: Cons) {
+    let mut frame_parser = serial::MeshtasticFrame::new();
     info!("core 1 loop starting...");
     loop {
         let grant = bbq.wait_read().await;
-        match str::from_utf8(&grant) {
-            Ok(val) => info!("{}", val),
 
-            Err(_e) => {
-                error!("Decode err");
-            }
-        }
+        info!(">>> processing frame");
+        let processed = frame_parser.process(&grant);
         let len = grant.len();
+        info!(">>> processed: {}", len);
         grant.release(len);
+
+        // match str::from_utf8(&grant) {
+        //     Ok(val) => info!("{}", val),
+
+        //     Err(_e) => {
+        //         error!("Decode err");
+        //     }
+        // }
+        // let len = grant.len();
+        // grant.release(len);
     }
 }
