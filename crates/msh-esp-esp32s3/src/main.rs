@@ -20,17 +20,19 @@ use embassy_executor::Spawner;
 use esp_hal::{
     clock::CpuClock,
     dma::DmaDescriptor,
+    dma_tx_buffer,
     system::Stack,
     timer::timg::TimerGroup,
     uart::{
-        self, RxConfig, Uart,
-        uhci::{RxConfig as UhciRxConfig, Uhci},
+        self, uhci::{RxConfig as UhciRxConfig, Uhci}, RxConfig, TxConfig, Uart
     },
 };
 use esp_rtos::embassy::Executor;
 use msh_esp_core::{
-    bbqueue::{Notify, DmaRx},
-    serial,
+    bbqueue::{DmaRx, Notify},
+    micropb::{MessageEncode, PbEncoder},
+    proto::{PayloadVariant, ToRadio},
+    serial::{self, FRAME_MAX_SIZE, FRAME_START1, FRAME_START2},
 };
 use static_cell::StaticCell;
 
@@ -85,6 +87,7 @@ async fn main(_spawner: Spawner) -> ! {
         peripherals.UART1,
         uart::Config::default()
             .with_rx(RxConfig::default())
+            .with_tx(TxConfig::default())
             .with_baudrate(38400),
     )
     .unwrap()
@@ -99,7 +102,7 @@ async fn main(_spawner: Spawner) -> ! {
         .modify(|_, w| w.seper_en().clear_bit().uart_idle_eof_en().set_bit());
 
     let uhci = uhci.into_async();
-    let (mut uhci_rx, _uhci_tx) = uhci.split();
+    let (mut uhci_rx, mut uhci_tx) = uhci.split();
 
     static CORE_1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
     let stack = CORE_1_STACK.init(Stack::new());
@@ -126,6 +129,31 @@ async fn main(_spawner: Spawner) -> ! {
 
     let descriptor = DMA_DESC.init(DmaDescriptor::EMPTY);
     let mut desc = descriptor;
+
+    let to_radio = ToRadio {
+        payload_variant: Some(PayloadVariant::WantConfigId(111)),
+    };
+
+    let proto_len = to_radio.compute_size();
+    let mut tx_buffer = dma_tx_buffer!(6).unwrap();
+    let buf = tx_buffer.as_mut_slice();
+
+    info!("SIZE: {}", proto_len);
+
+    buf[0..2].copy_from_slice(&[FRAME_START1, FRAME_START2]);
+    buf[2..4].copy_from_slice(&(proto_len as u16).to_be_bytes());
+    let mut encoder = PbEncoder::new(&mut buf[4..]);
+    to_radio.encode(&mut encoder).unwrap();
+
+    info!(" encoded buf: {:?}", buf);
+    let mut transfer = uhci_tx
+        .write(tx_buffer)
+        .unwrap_or_else(|e| panic!("{:?}", e.0));
+
+    transfer.wait_for_done().await;
+    let (err, tx_back, _init_buf) = transfer.wait();
+    uhci_tx = tx_back;
+    err.unwrap();
 
     info!("main loop starting...");
     loop {
