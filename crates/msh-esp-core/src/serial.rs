@@ -5,9 +5,9 @@ use micropb::{MessageDecode, MessageEncode};
 use crate::proto::FromRadio;
 use defmt;
 
-const START1: u8 = 0x94;
-const START2: u8 = 0xc3;
-const MAX_PROTO_FRAME: usize = 512; // frame bytes included
+pub const FRAME_START1: u8 = 0x94;
+pub const FRAME_START2: u8 = 0xc3;
+pub const FRAME_MAX_SIZE: usize = 512; // frame bytes included
 const MAX_LOG_FRAME: usize = 256;
 
 // struct FrameBuf<const N: usize> {
@@ -33,12 +33,12 @@ impl defmt::Format for State {
     }
 }
 // pub struct MeshtasticFrame {
-//     proto: FrameBuf<MAX_PROTO_FRAME>,
+//     proto: FrameBuf<FRAME_MAX_SIZE>,
 //     log: FrameBuf<MAX_LOG_FRAME>,
 // }
 
 pub struct MeshtasticFrame {
-    proto_buf: [u8; MAX_PROTO_FRAME],
+    proto_buf: [u8; FRAME_MAX_SIZE],
     log_buf: [u8; MAX_LOG_FRAME],
     lb_len: usize,
     state: State,
@@ -52,7 +52,7 @@ impl MeshtasticFrame {
     pub fn new() -> Self {
         info!("frame parser init");
         MeshtasticFrame {
-            proto_buf: [0u8; MAX_PROTO_FRAME],
+            proto_buf: [0u8; FRAME_MAX_SIZE],
             log_buf: [0u8; MAX_LOG_FRAME],
             lb_len: 0,
             state: State::Search,
@@ -66,7 +66,7 @@ impl MeshtasticFrame {
         while offset < len {
             match self.state {
                 State::Search => {
-                    if let Some(pos) = find_byte(START1, &buf[offset..len]) {
+                    if let Some(pos) = find_byte(FRAME_START1, &buf[offset..len]) {
                         offset = pos + 1;
                         self.state = State::FoundS1;
                     } else {
@@ -83,9 +83,9 @@ impl MeshtasticFrame {
                     let b = buf[offset];
                     offset += 1;
 
-                    if b == START2 {
+                    if b == FRAME_START2 {
                         self.state = State::FoundS2;
-                    } else if b != START1 {
+                    } else if b != FRAME_START1 {
                         self.state = State::Search;
                     };
                 }
@@ -108,7 +108,7 @@ impl MeshtasticFrame {
 
                     let proto_len = u16::from_be_bytes([msb, lsb]);
 
-                    if proto_len == 0 || proto_len as usize > MAX_PROTO_FRAME {
+                    if proto_len == 0 || proto_len as usize > FRAME_MAX_SIZE {
                         // corrupted msg
                         self.state = State::Search;
                     } else {
@@ -145,10 +145,10 @@ impl MeshtasticFrame {
 
                     let tail = partial_len + take;
 
-                    if tail > MAX_PROTO_FRAME {
+                    if tail > FRAME_MAX_SIZE {
                         warn!(
                             "Partial frame buf exceed max frame size: {}b. Reset.",
-                            MAX_PROTO_FRAME
+                            FRAME_MAX_SIZE
                         );
                         self.state = State::Search;
                         continue;

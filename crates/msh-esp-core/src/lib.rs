@@ -3,6 +3,7 @@
 pub mod bbqueue;
 mod logger;
 pub mod serial;
+pub use micropb;
 
 pub mod proto {
     mod proto_gen {
@@ -11,5 +12,5 @@ pub mod proto {
         include!(concat!(env!("OUT_DIR"), "/proto.rs"));
     }
 
-    pub use proto_gen::meshtastic_::{FromRadio, MeshPacket, ToRadio};
+    pub use proto_gen::meshtastic_::{FromRadio, MeshPacket, ToRadio, ToRadio_::PayloadVariant};
 }
