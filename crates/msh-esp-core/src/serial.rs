@@ -17,6 +17,7 @@ const MAX_LOG_FRAME: usize = 256;
 // }
 
 #[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum State {
     Search,
     FoundS1,
@@ -26,12 +27,6 @@ enum State {
     PartialFrame(u16, usize),
 }
 
-#[cfg(feature = "defmt")]
-impl defmt::Format for State {
-    fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "{}", self)
-    }
-}
 // pub struct MeshtasticFrame {
 //     proto: FrameBuf<FRAME_MAX_SIZE>,
 //     log: FrameBuf<MAX_LOG_FRAME>,
