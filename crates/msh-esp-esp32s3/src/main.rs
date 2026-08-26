@@ -19,20 +19,22 @@ use defmt::{error, info};
 use embassy_executor::Spawner;
 use esp_hal::{
     clock::CpuClock,
-    dma::DmaDescriptor,
+    dma::{DmaDescriptor, DmaError},
     dma_tx_buffer,
     system::Stack,
     timer::timg::TimerGroup,
     uart::{
-        self, uhci::{RxConfig as UhciRxConfig, Uhci}, RxConfig, TxConfig, Uart
+        self, RxConfig, TxConfig, Uart,
+        uhci::{Error as UhciError, RxConfig as UhciRxConfig, Uhci},
     },
 };
 use esp_rtos::embassy::Executor;
+use micropb::MessageDecode;
 use msh_esp_core::{
     bbqueue::{DmaRx, Notify},
     micropb::{MessageEncode, PbEncoder},
-    proto::{PayloadVariant, ToRadio},
-    serial::{self, FRAME_MAX_SIZE, FRAME_START1, FRAME_START2},
+    proto::{FromRadio, PayloadVariant, ToRadio},
+    serial::{self, FRAME_MAX_SIZE, FRAME_START1, FRAME_START2, FrameEvent},
 };
 use static_cell::StaticCell;
 
@@ -98,8 +100,42 @@ async fn main(_spawner: Spawner) -> ! {
     let _ = uhci.apply_rx_config(&UhciRxConfig::default().with_chunk_limit(5));
 
     let reg = unsafe { &*esp_hal::peripherals::UHCI0::PTR };
-    reg.conf0()
-        .modify(|_, w| w.seper_en().clear_bit().uart_idle_eof_en().set_bit());
+    reg.conf0().modify(|_, w| {
+        w
+            .seper_en()
+            .clear_bit()
+            .uart_idle_eof_en()
+            .set_bit()
+        // .encode_crc_en()
+        // .clear_bit()
+    });
+    // reg.escape_conf().modify(|_, w| {
+    //     w.tx_c0_esc_en()
+    //         .clear_bit()
+    //         .tx_db_esc_en()
+    //         .clear_bit()
+    //         .tx_11_esc_en()
+    //         .clear_bit()
+    //         .tx_13_esc_en()
+    //         .clear_bit()
+    //         .rx_c0_esc_en()
+    //         .clear_bit()
+    //         .rx_db_esc_en()
+    //         .clear_bit()
+    //         .rx_11_esc_en()
+    //         .clear_bit()
+    //         .rx_13_esc_en()
+    //         .clear_bit()
+    // });
+    // reg.escape_conf().modify(|_, w| {
+    //     w.tx_13_esc_en().clear_bit()
+    //         .tx_11_esc_en()
+    //         .clear_bit()
+    //         .tx_db_esc_en()
+    //         .clear_bit()
+    //         .tx_c0_esc_en()
+    //         .clear_bit()
+    // });
 
     let uhci = uhci.into_async();
     let (mut uhci_rx, mut uhci_tx) = uhci.split();
@@ -137,6 +173,7 @@ async fn main(_spawner: Spawner) -> ! {
     let proto_len = to_radio.compute_size();
     let mut tx_buffer = dma_tx_buffer!(6).unwrap();
     let buf = tx_buffer.as_mut_slice();
+    // let mut buf = [0u8; 6];
 
     info!("SIZE: {}", proto_len);
 
@@ -146,27 +183,50 @@ async fn main(_spawner: Spawner) -> ! {
     to_radio.encode(&mut encoder).unwrap();
 
     info!(" encoded buf: {:?}", buf);
-    let mut transfer = uhci_tx
+
+    // let res = uart.write(&buf).unwrap();
+    // info!("WROTE: {}", res);
+    let mut w_transfer = uhci_tx
         .write(tx_buffer)
         .unwrap_or_else(|e| panic!("{:?}", e.0));
 
-    transfer.wait_for_done().await;
-    let (err, tx_back, _init_buf) = transfer.wait();
+    w_transfer.wait_for_done().await;
+    let (err, tx_back, _init_buf) = w_transfer.wait();
     uhci_tx = tx_back;
-    err.unwrap();
 
-    info!("main loop starting...");
+    if let Err(e) = err {
+        error!("WRITE ERR: {}", defmt::Debug2Format(&e));
+    }
+
+    // info!("main loop starting...");
     loop {
-        let grant = trx.grant_max_remaining(1024).unwrap();
+        let grant = trx.grant_max_remaining(1028).unwrap();
         let dma_rx = DmaRx::new(grant, desc);
         let mut transfer = uhci_rx.read(dma_rx).unwrap_or_else(|e| panic!("{:?}", e.0));
         transfer.wait_for_done().await;
         let (err, rx_back, finished) = transfer.wait();
         uhci_rx = rx_back;
-        err.unwrap();
 
+        let s = finished.stat();
         desc = finished.commit();
         info!("commit done...");
+
+        info!(">>>>> STAT: {:?}", s);
+
+        if let Err(e) = err {
+            match e {
+                UhciError::Dma(DmaError::DescriptorError) => {
+                    error!("DMA DESCRIPTOR ERROR");
+                }
+                UhciError::Dma(_) => {
+                    error!("DMA ERROR: other");
+                }
+                _ => {
+                    error!("READ ERR: {}", defmt::Debug2Format(&e));
+                }
+            }
+        }
+
     }
 }
 
@@ -178,10 +238,31 @@ async fn core_1_serial(bbq: Cons) {
     loop {
         let grant = bbq.wait_read().await;
 
-        info!(">>> processing frame");
-        let processed = frame_parser.process(&grant);
+        info!(">>> processing frame: len: {}", grant.len());
+        let processed = frame_parser.process(&grant, |event| match event {
+            FrameEvent::Log(buf) => {
+                if let Ok(log_str) = str::from_utf8(buf) {
+                    info!("LOG: {}", log_str);
+                } else {
+                    error!("Cannot convert log buf to utf8");
+                }
+            }
+            FrameEvent::Proto(buf) => {
+                // info!("Protobuf bytes: {}", buf);
+                let mut msg = FromRadio::default();
+                let res = msg.decode_from_bytes(buf).inspect_err(|e| {
+                    error!("{:?}", defmt::Debug2Format(e));
+                });
+                if res.is_ok() {
+                    info!("Decoded protobuf, len: {}", msg.compute_size());
+                    // info!("{:#?}", defmt::Debug2Format(&msg));
+                } else {
+                    error!("Could not decode FromRadio protobuf");
+                }
+            }
+        });
         let len = grant.len();
-        info!(">>> processed: {}", len);
+        info!(">>> done, processed: {}", len);
         grant.release(len);
 
         // match str::from_utf8(&grant) {
