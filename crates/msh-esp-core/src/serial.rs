@@ -1,8 +1,5 @@
 use core::str::Utf8Error;
 
-use micropb::{MessageDecode, MessageEncode};
-
-use crate::proto::FromRadio;
 use defmt;
 
 pub const FRAME_START1: u8 = 0x94;
@@ -39,6 +36,11 @@ pub struct MeshtasticFrame {
     state: State,
 }
 
+pub enum FrameEvent<'a> {
+    Proto(&'a [u8]),
+    Log(&'a [u8]),
+}
+
 fn find_byte(needle: u8, haystack: &[u8]) -> Option<usize> {
     haystack.iter().position(|b| b == &needle)
 }
@@ -53,20 +55,22 @@ impl MeshtasticFrame {
             state: State::Search,
         }
     }
-    pub fn process(&mut self, buf: &[u8]) -> usize {
-        let len = buf.len();
+    pub fn process(&mut self, data: &[u8], buf: &mut [u8], emit: impl Fn(FrameEvent)) -> usize {
+        let len = data.len();
         let mut offset = 0;
-        info!("frame process {} {}", len, offset);
+        info!("begin frame process {} {}", len, offset);
 
         while offset < len {
+            info!("offset: {}, state: {}", offset, self.state);
             match self.state {
                 State::Search => {
-                    if let Some(pos) = find_byte(FRAME_START1, &buf[offset..len]) {
-                        offset = pos + 1;
+                    if let Some(pos) = find_byte(FRAME_START1, &data[offset..len]) {
+                        offset += pos + 1;
                         self.state = State::FoundS1;
                     } else {
+                        info!("PUSH LOG");
                         // push to log
-                        self.push_log(&buf[offset..len]);
+                        self.push_log(&data[offset..len], &emit);
                         offset = len;
                     }
                 }
@@ -75,7 +79,7 @@ impl MeshtasticFrame {
                         "Process frame: state '{:?}', offset: {}",
                         self.state, offset
                     );
-                    let b = buf[offset];
+                    let b = data[offset];
                     offset += 1;
 
                     if b == FRAME_START2 {
@@ -89,7 +93,7 @@ impl MeshtasticFrame {
                         "Process frame: state '{:?}', offset: {}",
                         self.state, offset
                     );
-                    let b = buf[offset];
+                    let b = data[offset];
                     offset += 1;
                     self.state = State::FoundMSB(b);
                 }
@@ -98,7 +102,7 @@ impl MeshtasticFrame {
                         "Process frame: state '{:?}', offset: {}",
                         self.state, offset
                     );
-                    let lsb = buf[offset];
+                    let lsb = data[offset];
                     offset += 1;
 
                     let proto_len = u16::from_be_bytes([msb, lsb]);
@@ -119,12 +123,12 @@ impl MeshtasticFrame {
                     let rest = remaining as usize;
 
                     if next_bytes >= rest {
-                        // we have a full protobuf, decode
-                        // &buf[offset..offset + rest]
+                        info!("EMIT, offset: {}, rest: {}, next_offset: {}, len: {}", offset, rest, offset + rest, len);
+                        emit(FrameEvent::Proto(&data[offset..offset + rest]));
                         offset += rest;
                         self.state = State::Search;
                     } else {
-                        self.proto_buf[..next_bytes].copy_from_slice(&buf[offset..len]);
+                        self.proto_buf[..next_bytes].copy_from_slice(&data[offset..len]);
                         self.state = State::PartialFrame(remaining - next_bytes as u16, next_bytes);
                         offset = len;
                     }
@@ -149,21 +153,11 @@ impl MeshtasticFrame {
                         continue;
                     }
 
-                    self.proto_buf[partial_len..tail].copy_from_slice(&buf[offset..offset + take]);
+                    self.proto_buf[partial_len..tail].copy_from_slice(&data[offset..offset + take]);
                     offset += take;
 
                     if take == rest {
-                        // collected full protobuf, decode
-                        let mut packet = FromRadio::default();
-                        let _ = packet
-                            .decode_from_bytes(&self.proto_buf[..tail])
-                            .inspect_err(|_err| {
-                                error!("DECODE ERROR");
-                                // error!("{}", err);
-                            })
-                            .inspect(|_| {
-                                info!("Decoded Protobuf: size: {}", packet.compute_size());
-                            });
+                        emit(FrameEvent::Proto(&self.proto_buf[..tail]));
                         self.state = State::Search;
                     } else {
                         self.state = State::PartialFrame(remaining - take as u16, tail);
@@ -174,17 +168,21 @@ impl MeshtasticFrame {
         offset.min(len)
     }
 
-    pub fn push_log(&mut self, buf: &[u8]) {
+    pub fn push_log(&mut self, buf: &[u8], emit: impl Fn(FrameEvent)) {
         let mut offset = 0;
-
         while offset < buf.len() {
             if let Some(pos) = find_byte(b'\n', &buf[offset..]) {
-                info!("found: offset: {}, pos: {}, len: {}", offset, pos, buf.len());
+                info!(
+                    "LOG found: offset: {}, pos: {}, len: {}",
+                    offset,
+                    pos,
+                    buf.len()
+                );
                 let end = offset + pos + 1;
                 let log = &buf[offset..end];
 
                 if self.lb_len == 0 {
-                    let _ = try_print_log(log);
+                    emit(FrameEvent::Log(log));
                     offset = end;
                 } else {
                     let cap = MAX_LOG_FRAME.saturating_sub(self.lb_len);
@@ -193,12 +191,12 @@ impl MeshtasticFrame {
                     if take > cap {
                         warn!("Log buffer full, no newline found, flushing...");
                         self.lb_len = 0;
-                        let _ = try_print_log(&self.log_buf);
-                        let _ = try_print_log(log);
+                        emit(FrameEvent::Log(&self.log_buf));
+                        emit(FrameEvent::Log(log));
                         offset += take;
                     } else {
                         self.log_buf[self.lb_len..self.lb_len + take].copy_from_slice(log);
-                        let _ = try_print_log(&self.log_buf[..self.lb_len + take]);
+                        emit(FrameEvent::Log(&self.log_buf[..self.lb_len + take]));
                         self.lb_len = 0;
                         offset += take;
                     }
@@ -211,9 +209,9 @@ impl MeshtasticFrame {
                 if take > cap {
                     warn!("Log buffer full, no newline found, flushing...");
                     self.lb_len = 0;
-                    let _ = try_print_log(&self.log_buf);
+                    emit(FrameEvent::Log(&self.log_buf));
                     // @todo: cap increased after flush, dont need to log this necessarily yet
-                    let _ = try_print_log(log);
+                    emit(FrameEvent::Log(log));
                     offset += take;
                 } else {
                     self.log_buf[self.lb_len..self.lb_len + take].copy_from_slice(log);
