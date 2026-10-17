@@ -7,15 +7,10 @@
 )]
 #![deny(clippy::large_stack_frames)]
 
-use core::str;
-
 use bbqueue::{
     BBQueue,
     nicknames::Texas,
-    prod_cons::{
-        framed::{FramedConsumer, FramedGrantW},
-        stream::StreamConsumer,
-    },
+    prod_cons::framed::FramedConsumer,
     traits::{coordination::cas::AtomicCoord, storage::Inline},
 };
 use defmt::{error, info};
@@ -23,9 +18,9 @@ use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use esp_hal::{
     clock::CpuClock,
-    dma::{DmaDescriptor, DmaError},
+    dma::DmaError,
     dma_tx_buffer, handler,
-    interrupt::{self, CpuInterrupt, Priority},
+    interrupt::{self, Priority},
     peripherals::Interrupt,
     system::Stack,
     timer::timg::TimerGroup,
@@ -37,13 +32,10 @@ use esp_hal::{
 use esp_rtos::embassy::Executor;
 use micropb::MessageDecode;
 use msh_esp_core::{
-    bbqueue::{DmaRx, Notify},
+    bbqueue::Notify,
     micropb::{MessageEncode, PbEncoder},
     proto::{FromRadio, PayloadVariant, ToRadio},
-    serial::{
-        self, ConsumedFrameBytes, FRAME_MAX_SIZE, FRAME_START1, FRAME_START2, Frame,
-        FrameProcessorError,
-    },
+    serial::{self, ConsumedFrameBytes, FRAME_MAX_SIZE, FRAME_START1, FRAME_START2, Frame},
 };
 use static_cell::StaticCell;
 
@@ -55,7 +47,6 @@ fn panic(panic_info: &core::panic::PanicInfo) -> ! {
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-static DMA_DESC: StaticCell<DmaDescriptor> = StaticCell::new();
 static BB: Texas<4096, Notify> = Texas::new();
 static DMA_RX_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
@@ -160,7 +151,7 @@ async fn main(_spawner: Spawner) -> ! {
     //         .clear_bit()
     // });
 
-    let (mut uhci_rx, mut uhci_tx) = uhci.split();
+    let (uhci_rx, uhci_tx) = uhci.split();
 
     interrupt::bind_handler(Interrupt::DMA_IN_CH0, on_dma_in_done);
     interrupt::enable(Interrupt::DMA_IN_CH0, Priority::Priority1);
@@ -188,9 +179,6 @@ async fn main(_spawner: Spawner) -> ! {
         },
     );
 
-    let descriptor = DMA_DESC.init(DmaDescriptor::EMPTY);
-    let mut desc = descriptor;
-
     let to_radio = ToRadio {
         payload_variant: Some(PayloadVariant::WantConfigId(111)),
     };
@@ -198,25 +186,17 @@ async fn main(_spawner: Spawner) -> ! {
     let proto_len = to_radio.compute_size();
     let mut tx_buffer = dma_tx_buffer!(6).unwrap();
     let buf = tx_buffer.as_mut_slice();
-    // let mut buf = [0u8; 6];
-
-    info!("SIZE: {}", proto_len);
 
     buf[0..2].copy_from_slice(&[FRAME_START1, FRAME_START2]);
     buf[2..4].copy_from_slice(&(proto_len as u16).to_be_bytes());
     let mut encoder = PbEncoder::new(&mut buf[4..]);
     to_radio.encode(&mut encoder).unwrap();
 
-    info!(" encoded buf: {:?}", buf);
-
-    // let res = uart.write(&buf).unwrap();
-    // info!("WROTE: {}", res);
-    let mut w_transfer = uhci_tx
+    let w_transfer = uhci_tx
         .write(tx_buffer)
         .unwrap_or_else(|e| panic!("{:?}", e.0));
 
-    let (err, tx_back, _init_buf) = w_transfer.wait();
-    uhci_tx = tx_back;
+    let (err, _tx_back, _init_buf) = w_transfer.wait();
 
     if let Err(e) = err {
         error!("WRITE ERR: {}", defmt::Debug2Format(&e));
