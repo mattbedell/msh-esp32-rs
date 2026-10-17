@@ -12,7 +12,7 @@ enum State {
     FoundS1,
     FoundS2,
     FoundMSB(u8),
-    Msg { remaining: usize, head: usize },
+    Msg { len: usize, remaining: usize, head: usize },
 }
 
 pub enum ProcessResult {
@@ -42,7 +42,6 @@ fn find_byte(needle: u8, haystack: &[u8]) -> Option<usize> {
 
 impl MeshtasticFrame {
     pub fn new() -> Self {
-        info!("frame parser init");
         MeshtasticFrame {
             state: State::Search,
         }
@@ -50,10 +49,9 @@ impl MeshtasticFrame {
     pub fn process(&mut self, data: &[u8], buf: &mut [u8]) -> (usize, ProcessResult) {
         let len = data.len();
         let mut offset = 0;
-        info!("begin frame process {} {}", len, offset);
 
         while offset < len {
-            info!("offset: {}, state: {}", offset, self.state);
+            debug!("Processing frame: state: '{:?}', offset: '{}', data_len: '{}'", self.state, offset, len);
             match self.state {
                 State::Search => {
                     if let Some(pos) = find_byte(FRAME_START1, &data[offset..len]) {
@@ -65,10 +63,6 @@ impl MeshtasticFrame {
                     }
                 }
                 State::FoundS1 => {
-                    info!(
-                        "Process frame: state '{:?}', offset: {}",
-                        self.state, offset
-                    );
                     let b = data[offset];
                     offset += 1;
 
@@ -79,19 +73,11 @@ impl MeshtasticFrame {
                     };
                 }
                 State::FoundS2 => {
-                    info!(
-                        "Process frame: state '{:?}', offset: {}",
-                        self.state, offset
-                    );
                     let b = data[offset];
                     offset += 1;
                     self.state = State::FoundMSB(b);
                 }
                 State::FoundMSB(msb) => {
-                    info!(
-                        "Process frame: state '{:?}', offset: {}",
-                        self.state, offset
-                    );
                     let lsb = data[offset];
                     offset += 1;
 
@@ -116,17 +102,13 @@ impl MeshtasticFrame {
                         return (offset, ProcessResult::Err);
                     } else {
                         self.state = State::Msg {
+                            len: proto_len,
                             remaining: proto_len,
                             head: 0,
                         };
                     }
                 }
-                State::Msg { remaining, head } => {
-                    info!(
-                        "Process frame: state '{:?}', offset: {}",
-                        self.state, offset
-                    );
-
+                State::Msg { remaining, head, len: msg_len } => {
                     let next_bytes = len - offset;
                     let take = next_bytes.min(remaining);
                     let next_head = head + take;
@@ -143,6 +125,7 @@ impl MeshtasticFrame {
                         self.state = State::Msg {
                             head: next_head,
                             remaining: remaining - take,
+                            len: msg_len,
                         };
                     }
                 }
