@@ -1,17 +1,10 @@
-use core::str::Utf8Error;
-
 use defmt;
+use thiserror::Error;
 
 pub const FRAME_START1: u8 = 0x94;
 pub const FRAME_START2: u8 = 0xc3;
 pub const FRAME_MAX_SIZE: usize = 512; // frame bytes included
 const MAX_LOG_FRAME: usize = 256;
-
-// struct FrameBuf<const N: usize> {
-//     buf: [u8; N],
-//     head: usize,
-//     tail: usize,
-// }
 
 #[derive(Copy, Clone, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -20,20 +13,26 @@ enum State {
     FoundS1,
     FoundS2,
     FoundMSB(u8),
-    FullFrame(u16),
-    PartialFrame(u16, usize),
+    Msg { remaining: usize },
 }
 
-// pub struct MeshtasticFrame {
-//     proto: FrameBuf<FRAME_MAX_SIZE>,
-//     log: FrameBuf<MAX_LOG_FRAME>,
-// }
+pub enum ProcessResult {
+    FullFrame(usize),
+    Incomplete,
+    Err,
+}
+
+#[derive(Clone, Copy, Debug, Error)]
+#[error("cannot process")]
+pub struct ProcessError {
+    len: usize,
+}
 
 pub struct MeshtasticFrame {
-    proto_buf: [u8; FRAME_MAX_SIZE],
     log_buf: [u8; MAX_LOG_FRAME],
     lb_len: usize,
     state: State,
+    head: usize,
 }
 
 pub enum FrameEvent<'a> {
@@ -49,13 +48,17 @@ impl MeshtasticFrame {
     pub fn new() -> Self {
         info!("frame parser init");
         MeshtasticFrame {
-            proto_buf: [0u8; FRAME_MAX_SIZE],
             log_buf: [0u8; MAX_LOG_FRAME],
             lb_len: 0,
             state: State::Search,
+            head: 0,
         }
     }
-    pub fn process(&mut self, data: &[u8], buf: &mut [u8], emit: impl Fn(FrameEvent)) -> usize {
+    pub fn process(
+        &mut self,
+        data: &[u8],
+        buf: &mut [u8],
+    ) -> (usize, ProcessResult) {
         let len = data.len();
         let mut offset = 0;
         info!("begin frame process {} {}", len, offset);
@@ -70,7 +73,7 @@ impl MeshtasticFrame {
                     } else {
                         info!("PUSH LOG");
                         // push to log
-                        self.push_log(&data[offset..len], &emit);
+                        // self.push_log(&data[offset..len], &emit);
                         offset = len;
                     }
                 }
@@ -105,67 +108,60 @@ impl MeshtasticFrame {
                     let lsb = data[offset];
                     offset += 1;
 
-                    let proto_len = u16::from_be_bytes([msb, lsb]);
+                    let proto_len = u16::from_be_bytes([msb, lsb]) as usize;
 
-                    if proto_len == 0 || proto_len as usize > FRAME_MAX_SIZE {
-                        // corrupted msg
+                    if proto_len == 0 || proto_len > FRAME_MAX_SIZE || proto_len > buf.len() {
+                        if proto_len > buf.len() {
+                            warn!(
+                                "Frame len exceeds buffer: state '{:?}', offset: {}, expected_len: {}, buf_len: {}",
+                                self.state,
+                                offset,
+                                proto_len,
+                                buf.len(),
+                            );
+                        } else {
+                            warn!(
+                                "Corrupted frame: state '{:?}', offset: {}, expected_len: {}",
+                                self.state, offset, proto_len
+                            );
+                        }
                         self.state = State::Search;
+                        return (offset, ProcessResult::Err);
                     } else {
-                        self.state = State::FullFrame(proto_len);
+                        self.head = 0;
+                        self.state = State::Msg {
+                            remaining: proto_len,
+                        };
                     }
                 }
-                State::FullFrame(remaining) => {
+                State::Msg { remaining } => {
                     info!(
                         "Process frame: state '{:?}', offset: {}",
                         self.state, offset
                     );
+
                     let next_bytes = len - offset;
-                    let rest = remaining as usize;
+                    let take = next_bytes.min(remaining);
 
-                    if next_bytes >= rest {
-                        info!("EMIT, offset: {}, rest: {}, next_offset: {}, len: {}", offset, rest, offset + rest, len);
-                        emit(FrameEvent::Proto(&data[offset..offset + rest]));
-                        offset += rest;
-                        self.state = State::Search;
-                    } else {
-                        self.proto_buf[..next_bytes].copy_from_slice(&data[offset..len]);
-                        self.state = State::PartialFrame(remaining - next_bytes as u16, next_bytes);
-                        offset = len;
-                    }
-                }
-                State::PartialFrame(remaining, partial_len) => {
-                    info!(
-                        "Process frame: state '{:?}', offset: {}",
-                        self.state, offset
-                    );
-                    let next_bytes = len - offset;
-                    let rest = remaining as usize;
-                    let take = next_bytes.min(rest);
-
-                    let tail = partial_len + take;
-
-                    if tail > FRAME_MAX_SIZE {
-                        warn!(
-                            "Partial frame buf exceed max frame size: {}b. Reset.",
-                            FRAME_MAX_SIZE
-                        );
-                        self.state = State::Search;
-                        continue;
-                    }
-
-                    self.proto_buf[partial_len..tail].copy_from_slice(&data[offset..offset + take]);
+                    buf[self.head..self.head + take].copy_from_slice(&data[offset..offset + take]);
+                    self.head += take;
                     offset += take;
 
-                    if take == rest {
-                        emit(FrameEvent::Proto(&self.proto_buf[..tail]));
+                    if take == remaining {
+                        let frame_len = self.head;
+                        self.head = 0;
                         self.state = State::Search;
+                        return (offset, ProcessResult::FullFrame(frame_len));
                     } else {
-                        self.state = State::PartialFrame(remaining - take as u16, tail);
+                        self.state = State::Msg {
+                            remaining: remaining - take,
+                        };
                     }
                 }
             }
         }
-        offset.min(len)
+
+        (offset, ProcessResult::Incomplete)
     }
 
     pub fn push_log(&mut self, buf: &[u8], emit: impl Fn(FrameEvent)) {
@@ -223,11 +219,17 @@ impl MeshtasticFrame {
     }
 }
 
-fn try_print_log(buf: &[u8]) -> Result<(), Utf8Error> {
-    if let Ok(log_str) = str::from_utf8(buf) {
-        info!("{}", log_str);
-    } else {
-        error!("Cannot convert log buf to utf8");
+impl Default for MeshtasticFrame {
+    fn default() -> Self {
+        Self::new()
     }
-    Ok(())
 }
+
+// fn try_print_log(buf: &[u8]) -> Result<(), Utf8Error> {
+//     if let Ok(log_str) = str::from_utf8(buf) {
+//         info!("{}", log_str);
+//     } else {
+//         error!("Cannot convert log buf to utf8");
+//     }
+//     Ok(())
+// }
