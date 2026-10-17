@@ -5,6 +5,10 @@ pub const FRAME_START1: u8 = 0x94;
 pub const FRAME_START2: u8 = 0xc3;
 pub const FRAME_MAX_SIZE: usize = 512; // frame bytes included
 
+pub trait ConsumedFrameBytes {
+    fn consumed(&self) -> usize;
+}
+
 #[derive(Copy, Clone, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum State {
@@ -12,19 +16,64 @@ enum State {
     FoundS1,
     FoundS2,
     FoundMSB(u8),
-    Msg { len: usize, remaining: usize, head: usize },
+    Msg {
+        len: usize,
+        remaining: usize,
+        head: usize,
+    },
 }
 
-pub enum ProcessResult {
-    FullFrame(usize),
-    Incomplete,
-    Err,
+pub enum Frame {
+    Complete { len: usize, consumed: usize },
+    Incomplete { consumed: usize },
+}
+
+impl ConsumedFrameBytes for Frame {
+    fn consumed(&self) -> usize {
+        match self {
+            Self::Complete { consumed, .. } | Self::Incomplete { consumed } => *consumed,
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("{kind} (consumed {consumed} bytes)")]
+pub struct FrameProcessorError {
+    consumed: usize,
+    pub kind: FrameErrorKind,
+}
+
+impl ConsumedFrameBytes for FrameProcessorError {
+    fn consumed(&self) -> usize {
+        self.consumed
+    }
 }
 
 #[derive(Clone, Copy, Debug, Error)]
-#[error("cannot process")]
-pub struct ProcessError {
-    len: usize,
+#[non_exhaustive]
+pub enum FrameErrorKind {
+    #[error("frame length {frame_len} exceeds buffer capacity {capacity}")]
+    InsufficientCapacity { capacity: usize, frame_len: usize },
+    #[error("invalid {frame_len}, length must be in range 1..={}", FRAME_MAX_SIZE)]
+    InvalidFrameLen { frame_len: usize },
+}
+
+impl FrameErrorKind {
+    fn and_consumed(self, consumed: usize) -> FrameProcessorError {
+        FrameProcessorError {
+            consumed,
+            kind: self,
+        }
+    }
+}
+
+impl ConsumedFrameBytes for Result<Frame, FrameProcessorError> {
+    fn consumed(&self) -> usize {
+        match self {
+            Ok(frame) => frame.consumed(),
+            Err(e) => e.consumed(),
+        }
+    }
 }
 
 pub struct MeshtasticFrame {
@@ -46,12 +95,15 @@ impl MeshtasticFrame {
             state: State::Search,
         }
     }
-    pub fn process(&mut self, data: &[u8], buf: &mut [u8]) -> (usize, ProcessResult) {
+    pub fn process(&mut self, data: &[u8], buf: &mut [u8]) -> Result<Frame, FrameProcessorError> {
         let len = data.len();
         let mut offset = 0;
 
         while offset < len {
-            debug!("Processing frame: state: '{:?}', offset: '{}', data_len: '{}'", self.state, offset, len);
+            debug!(
+                "Processing frame: state: '{:?}', offset: '{}', data_len: '{}'",
+                self.state, offset, len
+            );
             match self.state {
                 State::Search => {
                     if let Some(pos) = find_byte(FRAME_START1, &data[offset..len]) {
@@ -81,34 +133,24 @@ impl MeshtasticFrame {
                     let lsb = data[offset];
                     offset += 1;
 
-                    let proto_len = u16::from_be_bytes([msb, lsb]) as usize;
+                    let frame_len = u16::from_be_bytes([msb, lsb]) as usize;
 
-                    if proto_len == 0 || proto_len > FRAME_MAX_SIZE || proto_len > buf.len() {
-                        if proto_len > buf.len() {
-                            warn!(
-                                "Frame len exceeds buffer: state '{:?}', offset: {}, expected_len: {}, buf_len: {}",
-                                self.state,
-                                offset,
-                                proto_len,
-                                buf.len(),
-                            );
-                        } else {
-                            warn!(
-                                "Corrupted frame: state '{:?}', offset: {}, expected_len: {}",
-                                self.state, offset, proto_len
-                            );
-                        }
+                    Self::validate_frame_len(frame_len, buf.len()).map_err(|err| {
                         self.state = State::Search;
-                        return (offset, ProcessResult::Err);
-                    } else {
-                        self.state = State::Msg {
-                            len: proto_len,
-                            remaining: proto_len,
-                            head: 0,
-                        };
-                    }
+                        err.and_consumed(offset)
+                    })?;
+
+                    self.state = State::Msg {
+                        len: frame_len,
+                        remaining: frame_len,
+                        head: 0,
+                    };
                 }
-                State::Msg { remaining, head, len: msg_len } => {
+                State::Msg {
+                    remaining,
+                    head,
+                    len: msg_len,
+                } => {
                     let next_bytes = len - offset;
                     let take = next_bytes.min(remaining);
                     let next_head = head + take;
@@ -120,7 +162,10 @@ impl MeshtasticFrame {
                     if take == remaining {
                         let frame_len = next_head;
                         self.state = State::Search;
-                        return (offset, ProcessResult::FullFrame(frame_len));
+                        return Ok(Frame::Complete {
+                            len: frame_len,
+                            consumed: offset,
+                        });
                     } else {
                         self.state = State::Msg {
                             head: next_head,
@@ -131,8 +176,20 @@ impl MeshtasticFrame {
                 }
             }
         }
+        Ok(Frame::Incomplete { consumed: offset })
+    }
 
-        (offset, ProcessResult::Incomplete)
+    fn validate_frame_len(frame_len: usize, buf_len: usize) -> Result<(), FrameErrorKind> {
+        if !(1..=FRAME_MAX_SIZE).contains(&frame_len) {
+            Err(FrameErrorKind::InvalidFrameLen { frame_len })
+        } else if frame_len > buf_len {
+            Err(FrameErrorKind::InsufficientCapacity {
+                frame_len,
+                capacity: buf_len,
+            })
+        } else {
+            Ok(())
+        }
     }
 }
 

@@ -40,7 +40,10 @@ use msh_esp_core::{
     bbqueue::{DmaRx, Notify},
     micropb::{MessageEncode, PbEncoder},
     proto::{FromRadio, PayloadVariant, ToRadio},
-    serial::{self, FRAME_MAX_SIZE, FRAME_START1, FRAME_START2, FrameEvent, ProcessResult},
+    serial::{
+        self, ConsumedFrameBytes, FRAME_MAX_SIZE, FRAME_START1, FRAME_START2, Frame,
+        FrameProcessorError,
+    },
 };
 use static_cell::StaticCell;
 
@@ -238,18 +241,19 @@ async fn main(_spawner: Spawner) -> ! {
         }
 
         let consumed = if let Some(ref mut grant_buf) = grant {
-            let (consumed, result) = frame_parser.process(data, grant_buf);
+            let res = frame_parser.process(data, grant_buf);
 
-            match result {
-                ProcessResult::FullFrame(len) => {
+            match res {
+                Ok(Frame::Complete { len, .. }) => {
                     grant.take().unwrap().commit(len as u16);
                 }
-                ProcessResult::Incomplete => {}
-                ProcessResult::Err => {
+                Ok(Frame::Incomplete { .. }) => {}
+                Err(ref err) => {
                     grant.take().unwrap().commit(0);
+                    error!("{}", defmt::Debug2Format(err));
                 }
-            }
-            consumed
+            };
+            res.consumed()
         } else {
             data.len()
         };
