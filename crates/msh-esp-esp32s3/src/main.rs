@@ -40,7 +40,7 @@ use msh_esp_core::{
     bbqueue::{DmaRx, Notify},
     micropb::{MessageEncode, PbEncoder},
     proto::{FromRadio, PayloadVariant, ToRadio},
-    serial::{self, FrameEvent, ProcessResult, FRAME_MAX_SIZE, FRAME_START1, FRAME_START2},
+    serial::{self, FRAME_MAX_SIZE, FRAME_START1, FRAME_START2, FrameEvent, ProcessResult},
 };
 use static_cell::StaticCell;
 
@@ -243,8 +243,8 @@ async fn main(_spawner: Spawner) -> ! {
             match result {
                 ProcessResult::FullFrame(len) => {
                     grant.take().unwrap().commit(len as u16);
-                },
-                ProcessResult::Incomplete => {},
+                }
+                ProcessResult::Incomplete => {}
                 ProcessResult::Err => {
                     grant.take().unwrap().commit(0);
                 }
@@ -272,49 +272,23 @@ async fn main(_spawner: Spawner) -> ! {
     }
 }
 
-type Cons = StreamConsumer<&'static BBQueue<Inline<4096>, AtomicCoord, Notify>>;
+type Cons = FramedConsumer<&'static BBQueue<Inline<4096>, AtomicCoord, Notify>>;
 #[embassy_executor::task]
 async fn core_1_serial(bbq: Cons) {
-    // let mut frame_parser = serial::MeshtasticFrame::new();
     info!("core 1 loop starting...");
     loop {
-        // let grant = bbq.wait_read().await;
+        let grant = bbq.wait_read().await;
+        let mut msg = FromRadio::default();
 
-        // info!(">>> processing frame: len: {}", grant.len());
-        // let processed = frame_parser.process(&grant, |event| match event {
-        //     FrameEvent::Log(buf) => {
-        //         if let Ok(log_str) = str::from_utf8(buf) {
-        //             info!("LOG: {}", log_str);
-        //         } else {
-        //             error!("Cannot convert log buf to utf8");
-        //         }
-        //     }
-        //     FrameEvent::Proto(buf) => {
-        //         // info!("Protobuf bytes: {}", buf);
-        //         let mut msg = FromRadio::default();
-        //         let res = msg.decode_from_bytes(buf).inspect_err(|e| {
-        //             error!("{:?}", defmt::Debug2Format(e));
-        //         });
-        //         if res.is_ok() {
-        //             info!("Decoded protobuf, len: {}", msg.compute_size());
-        //             // info!("{:#?}", defmt::Debug2Format(&msg));
-        //         } else {
-        //             error!("Could not decode FromRadio protobuf");
-        //         }
-        //     }
-        // });
-        // let len = grant.len();
-        // info!(">>> done, processed: {}", len);
-        // grant.release(len);
+        match msg.decode_from_bytes(&grant) {
+            Ok(()) => {
+                info!("Decoded protobuf: len: '{}'", msg.compute_size());
+            }
+            Err(err) => {
+                error!("{:?}", defmt::Debug2Format(&err));
+            }
+        }
 
-        // match str::from_utf8(&grant) {
-        //     Ok(val) => info!("{}", val),
-
-        //     Err(_e) => {
-        //         error!("Decode err");
-        //     }
-        // }
-        // let len = grant.len();
-        // grant.release(len);
+        grant.release();
     }
 }
