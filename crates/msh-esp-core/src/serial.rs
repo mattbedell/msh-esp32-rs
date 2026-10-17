@@ -71,9 +71,7 @@ impl MeshtasticFrame {
                         offset += pos + 1;
                         self.state = State::FoundS1;
                     } else {
-                        info!("PUSH LOG");
-                        // push to log
-                        // self.push_log(&data[offset..len], &emit);
+                        // @todo: debug logs are sent between protobuf frames, capture them
                         offset = len;
                     }
                 }
@@ -163,60 +161,6 @@ impl MeshtasticFrame {
 
         (offset, ProcessResult::Incomplete)
     }
-
-    pub fn push_log(&mut self, buf: &[u8], emit: impl Fn(FrameEvent)) {
-        let mut offset = 0;
-        while offset < buf.len() {
-            if let Some(pos) = find_byte(b'\n', &buf[offset..]) {
-                info!(
-                    "LOG found: offset: {}, pos: {}, len: {}",
-                    offset,
-                    pos,
-                    buf.len()
-                );
-                let end = offset + pos + 1;
-                let log = &buf[offset..end];
-
-                if self.lb_len == 0 {
-                    emit(FrameEvent::Log(log));
-                    offset = end;
-                } else {
-                    let cap = MAX_LOG_FRAME.saturating_sub(self.lb_len);
-                    let take = log.len();
-
-                    if take > cap {
-                        warn!("Log buffer full, no newline found, flushing...");
-                        self.lb_len = 0;
-                        emit(FrameEvent::Log(&self.log_buf));
-                        emit(FrameEvent::Log(log));
-                        offset += take;
-                    } else {
-                        self.log_buf[self.lb_len..self.lb_len + take].copy_from_slice(log);
-                        emit(FrameEvent::Log(&self.log_buf[..self.lb_len + take]));
-                        self.lb_len = 0;
-                        offset += take;
-                    }
-                }
-            // @todo: dry this up
-            } else {
-                let log = &buf[offset..];
-                let cap = MAX_LOG_FRAME.saturating_sub(self.lb_len);
-                let take = log.len();
-                if take > cap {
-                    warn!("Log buffer full, no newline found, flushing...");
-                    self.lb_len = 0;
-                    emit(FrameEvent::Log(&self.log_buf));
-                    // @todo: cap increased after flush, dont need to log this necessarily yet
-                    emit(FrameEvent::Log(log));
-                    offset += take;
-                } else {
-                    self.log_buf[self.lb_len..self.lb_len + take].copy_from_slice(log);
-                    self.lb_len += take;
-                    offset += take;
-                }
-            }
-        }
-    }
 }
 
 impl Default for MeshtasticFrame {
@@ -224,12 +168,3 @@ impl Default for MeshtasticFrame {
         Self::new()
     }
 }
-
-// fn try_print_log(buf: &[u8]) -> Result<(), Utf8Error> {
-//     if let Ok(log_str) = str::from_utf8(buf) {
-//         info!("{}", log_str);
-//     } else {
-//         error!("Cannot convert log buf to utf8");
-//     }
-//     Ok(())
-// }
