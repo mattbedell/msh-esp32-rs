@@ -4,7 +4,6 @@ use thiserror::Error;
 pub const FRAME_START1: u8 = 0x94;
 pub const FRAME_START2: u8 = 0xc3;
 pub const FRAME_MAX_SIZE: usize = 512; // frame bytes included
-const MAX_LOG_FRAME: usize = 256;
 
 #[derive(Copy, Clone, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -13,7 +12,7 @@ enum State {
     FoundS1,
     FoundS2,
     FoundMSB(u8),
-    Msg { remaining: usize },
+    Msg { remaining: usize, head: usize },
 }
 
 pub enum ProcessResult {
@@ -29,10 +28,7 @@ pub struct ProcessError {
 }
 
 pub struct MeshtasticFrame {
-    log_buf: [u8; MAX_LOG_FRAME],
-    lb_len: usize,
     state: State,
-    head: usize,
 }
 
 pub enum FrameEvent<'a> {
@@ -48,17 +44,10 @@ impl MeshtasticFrame {
     pub fn new() -> Self {
         info!("frame parser init");
         MeshtasticFrame {
-            log_buf: [0u8; MAX_LOG_FRAME],
-            lb_len: 0,
             state: State::Search,
-            head: 0,
         }
     }
-    pub fn process(
-        &mut self,
-        data: &[u8],
-        buf: &mut [u8],
-    ) -> (usize, ProcessResult) {
+    pub fn process(&mut self, data: &[u8], buf: &mut [u8]) -> (usize, ProcessResult) {
         let len = data.len();
         let mut offset = 0;
         info!("begin frame process {} {}", len, offset);
@@ -126,13 +115,13 @@ impl MeshtasticFrame {
                         self.state = State::Search;
                         return (offset, ProcessResult::Err);
                     } else {
-                        self.head = 0;
                         self.state = State::Msg {
                             remaining: proto_len,
+                            head: 0,
                         };
                     }
                 }
-                State::Msg { remaining } => {
+                State::Msg { remaining, head } => {
                     info!(
                         "Process frame: state '{:?}', offset: {}",
                         self.state, offset
@@ -140,18 +129,19 @@ impl MeshtasticFrame {
 
                     let next_bytes = len - offset;
                     let take = next_bytes.min(remaining);
+                    let next_head = head + take;
+                    let next_offset = offset + take;
 
-                    buf[self.head..self.head + take].copy_from_slice(&data[offset..offset + take]);
-                    self.head += take;
-                    offset += take;
+                    buf[head..next_head].copy_from_slice(&data[offset..next_offset]);
+                    offset = next_offset;
 
                     if take == remaining {
-                        let frame_len = self.head;
-                        self.head = 0;
+                        let frame_len = next_head;
                         self.state = State::Search;
                         return (offset, ProcessResult::FullFrame(frame_len));
                     } else {
                         self.state = State::Msg {
+                            head: next_head,
                             remaining: remaining - take,
                         };
                     }
