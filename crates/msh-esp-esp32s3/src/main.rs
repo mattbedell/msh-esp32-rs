@@ -119,37 +119,7 @@ async fn main(_spawner: Spawner) -> ! {
     let reg = unsafe { &*esp_hal::peripherals::UHCI0::PTR };
     reg.conf0().modify(|_, w| {
         w.seper_en().clear_bit().uart_idle_eof_en().set_bit()
-        // .encode_crc_en()
-        // .clear_bit()
     });
-    // let dma = unsafe { &*esp_hal::peripherals::DMA::PTR };
-    // reg.escape_conf().modify(|_, w| {
-    //     w.tx_c0_esc_en()
-    //         .clear_bit()
-    //         .tx_db_esc_en()
-    //         .clear_bit()
-    //         .tx_11_esc_en()
-    //         .clear_bit()
-    //         .tx_13_esc_en()
-    //         .clear_bit()
-    //         .rx_c0_esc_en()
-    //         .clear_bit()
-    //         .rx_db_esc_en()
-    //         .clear_bit()
-    //         .rx_11_esc_en()
-    //         .clear_bit()
-    //         .rx_13_esc_en()
-    //         .clear_bit()
-    // });
-    // reg.escape_conf().modify(|_, w| {
-    //     w.tx_13_esc_en().clear_bit()
-    //         .tx_11_esc_en()
-    //         .clear_bit()
-    //         .tx_db_esc_en()
-    //         .clear_bit()
-    //         .tx_c0_esc_en()
-    //         .clear_bit()
-    // });
 
     let (uhci_rx, uhci_tx) = uhci.split();
 
