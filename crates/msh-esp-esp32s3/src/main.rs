@@ -12,15 +12,21 @@ use core::str;
 use bbqueue::{
     BBQueue,
     nicknames::Texas,
-    prod_cons::stream::StreamConsumer,
+    prod_cons::{
+        framed::{FramedConsumer, FramedGrantW},
+        stream::StreamConsumer,
+    },
     traits::{coordination::cas::AtomicCoord, storage::Inline},
 };
 use defmt::{error, info};
 use embassy_executor::Spawner;
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use esp_hal::{
     clock::CpuClock,
     dma::{DmaDescriptor, DmaError},
-    dma_tx_buffer,
+    dma_tx_buffer, handler,
+    interrupt::{self, CpuInterrupt, Priority},
+    peripherals::Interrupt,
     system::Stack,
     timer::timg::TimerGroup,
     uart::{
@@ -34,7 +40,7 @@ use msh_esp_core::{
     bbqueue::{DmaRx, Notify},
     micropb::{MessageEncode, PbEncoder},
     proto::{FromRadio, PayloadVariant, ToRadio},
-    serial::{self, FRAME_MAX_SIZE, FRAME_START1, FRAME_START2, FrameEvent},
+    serial::{self, FrameEvent, ProcessResult, FRAME_MAX_SIZE, FRAME_START1, FRAME_START2},
 };
 use static_cell::StaticCell;
 
@@ -48,6 +54,12 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 static DMA_DESC: StaticCell<DmaDescriptor> = StaticCell::new();
 static BB: Texas<4096, Notify> = Texas::new();
+static DMA_RX_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
+#[handler(priority = Priority::Priority1)]
+fn on_dma_in_done() {
+    DMA_RX_SIGNAL.signal(());
+}
 
 #[allow(
     clippy::large_stack_frames,
@@ -88,7 +100,7 @@ async fn main(_spawner: Spawner) -> ! {
     let uart = Uart::new(
         peripherals.UART1,
         uart::Config::default()
-            .with_rx(RxConfig::default())
+            .with_rx(RxConfig::default().with_fifo_full_threshold(64))
             .with_tx(TxConfig::default())
             .with_baudrate(38400),
     )
@@ -101,14 +113,11 @@ async fn main(_spawner: Spawner) -> ! {
 
     let reg = unsafe { &*esp_hal::peripherals::UHCI0::PTR };
     reg.conf0().modify(|_, w| {
-        w
-            .seper_en()
-            .clear_bit()
-            .uart_idle_eof_en()
-            .set_bit()
+        w.seper_en().clear_bit().uart_idle_eof_en().set_bit()
         // .encode_crc_en()
         // .clear_bit()
     });
+    // let dma = unsafe { &*esp_hal::peripherals::DMA::PTR };
     // reg.escape_conf().modify(|_, w| {
     //     w.tx_c0_esc_en()
     //         .clear_bit()
@@ -137,14 +146,16 @@ async fn main(_spawner: Spawner) -> ! {
     //         .clear_bit()
     // });
 
-    let uhci = uhci.into_async();
     let (mut uhci_rx, mut uhci_tx) = uhci.split();
+
+    interrupt::bind_handler(Interrupt::DMA_IN_CH0, on_dma_in_done);
+    interrupt::enable(Interrupt::DMA_IN_CH0, Priority::Priority1);
 
     static CORE_1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
     let stack = CORE_1_STACK.init(Stack::new());
 
-    let trx = BB.stream_producer();
-    let drx = BB.stream_consumer();
+    let trx = BB.framed_producer();
+    let drx = BB.framed_consumer();
 
     esp_rtos::start_second_core(
         peripherals.CPU_CTRL,
@@ -158,7 +169,7 @@ async fn main(_spawner: Spawner) -> ! {
 
             executor.run(|spawner| {
                 // spawner.spawn(core_1_display(epd, spi_device).unwrap());
-                spawner.spawn(core_1_serial(drx).unwrap());
+                // spawner.spawn(core_1_serial(drx).unwrap());
             });
         },
     );
@@ -190,7 +201,6 @@ async fn main(_spawner: Spawner) -> ! {
         .write(tx_buffer)
         .unwrap_or_else(|e| panic!("{:?}", e.0));
 
-    w_transfer.wait_for_done().await;
     let (err, tx_back, _init_buf) = w_transfer.wait();
     uhci_tx = tx_back;
 
@@ -198,20 +208,42 @@ async fn main(_spawner: Spawner) -> ! {
         error!("WRITE ERR: {}", defmt::Debug2Format(&e));
     }
 
-    // info!("main loop starting...");
+    let stream = esp_hal::dma_rx_stream_buffer!(4096, 64);
+    let mut transfer = uhci_rx.read(stream).unwrap_or_else(|e| panic!("{:?}", e.0));
+
+    let mut frame_parser = serial::MeshtasticFrame::new();
+    let frame_size: u16 = FRAME_MAX_SIZE.try_into().unwrap();
+    let mut grant = trx.grant(frame_size).ok();
+
     loop {
-        let grant = trx.grant_max_remaining(1028).unwrap();
-        let dma_rx = DmaRx::new(grant, desc);
-        let mut transfer = uhci_rx.read(dma_rx).unwrap_or_else(|e| panic!("{:?}", e.0));
-        transfer.wait_for_done().await;
-        let (err, rx_back, finished) = transfer.wait();
-        uhci_rx = rx_back;
+        let data = transfer.peek();
+        if data.is_empty() {
+            DMA_RX_SIGNAL.wait().await;
+            continue;
+        }
 
-        let s = finished.stat();
-        desc = finished.commit();
-        info!("commit done...");
+        if grant.is_none() {
+            grant = trx.grant(frame_size).ok();
+        }
 
-        info!(">>>>> STAT: {:?}", s);
+        let consumed = if let Some(ref mut grant_buf) = grant {
+            let (consumed, result) = frame_parser.process(data, grant_buf);
+
+            match result {
+                ProcessResult::FullFrame(len) => {
+                    grant.take().unwrap().commit(len as u16);
+                },
+                ProcessResult::Incomplete => {},
+                ProcessResult::Err => {
+                    grant.take().unwrap().commit(0);
+                }
+            }
+            consumed
+        } else {
+            data.len()
+        };
+
+        transfer.consume(consumed);
 
         if let Err(e) = err {
             match e {
@@ -226,44 +258,43 @@ async fn main(_spawner: Spawner) -> ! {
                 }
             }
         }
-
     }
 }
 
 type Cons = StreamConsumer<&'static BBQueue<Inline<4096>, AtomicCoord, Notify>>;
 #[embassy_executor::task]
 async fn core_1_serial(bbq: Cons) {
-    let mut frame_parser = serial::MeshtasticFrame::new();
+    // let mut frame_parser = serial::MeshtasticFrame::new();
     info!("core 1 loop starting...");
     loop {
-        let grant = bbq.wait_read().await;
+        // let grant = bbq.wait_read().await;
 
-        info!(">>> processing frame: len: {}", grant.len());
-        let processed = frame_parser.process(&grant, |event| match event {
-            FrameEvent::Log(buf) => {
-                if let Ok(log_str) = str::from_utf8(buf) {
-                    info!("LOG: {}", log_str);
-                } else {
-                    error!("Cannot convert log buf to utf8");
-                }
-            }
-            FrameEvent::Proto(buf) => {
-                // info!("Protobuf bytes: {}", buf);
-                let mut msg = FromRadio::default();
-                let res = msg.decode_from_bytes(buf).inspect_err(|e| {
-                    error!("{:?}", defmt::Debug2Format(e));
-                });
-                if res.is_ok() {
-                    info!("Decoded protobuf, len: {}", msg.compute_size());
-                    // info!("{:#?}", defmt::Debug2Format(&msg));
-                } else {
-                    error!("Could not decode FromRadio protobuf");
-                }
-            }
-        });
-        let len = grant.len();
-        info!(">>> done, processed: {}", len);
-        grant.release(len);
+        // info!(">>> processing frame: len: {}", grant.len());
+        // let processed = frame_parser.process(&grant, |event| match event {
+        //     FrameEvent::Log(buf) => {
+        //         if let Ok(log_str) = str::from_utf8(buf) {
+        //             info!("LOG: {}", log_str);
+        //         } else {
+        //             error!("Cannot convert log buf to utf8");
+        //         }
+        //     }
+        //     FrameEvent::Proto(buf) => {
+        //         // info!("Protobuf bytes: {}", buf);
+        //         let mut msg = FromRadio::default();
+        //         let res = msg.decode_from_bytes(buf).inspect_err(|e| {
+        //             error!("{:?}", defmt::Debug2Format(e));
+        //         });
+        //         if res.is_ok() {
+        //             info!("Decoded protobuf, len: {}", msg.compute_size());
+        //             // info!("{:#?}", defmt::Debug2Format(&msg));
+        //         } else {
+        //             error!("Could not decode FromRadio protobuf");
+        //         }
+        //     }
+        // });
+        // let len = grant.len();
+        // info!(">>> done, processed: {}", len);
+        // grant.release(len);
 
         // match str::from_utf8(&grant) {
         //     Ok(val) => info!("{}", val),
