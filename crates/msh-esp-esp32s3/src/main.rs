@@ -58,6 +58,11 @@ static DMA_RX_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 #[handler(priority = Priority::Priority1)]
 fn on_dma_in_done() {
+    let dma = unsafe { &*esp_hal::peripherals::DMA::PTR };
+    dma.ch(0)
+        .in_int()
+        .clr()
+        .write(|w| w.in_done().clear_bit_by_one());
     DMA_RX_SIGNAL.signal(());
 }
 
@@ -110,6 +115,12 @@ async fn main(_spawner: Spawner) -> ! {
 
     let mut uhci = Uhci::new(uart, peripherals.UHCI0, peripherals.DMA_CH0);
     let _ = uhci.apply_rx_config(&UhciRxConfig::default().with_chunk_limit(5));
+
+    let dma = unsafe { &*esp_hal::peripherals::DMA::PTR };
+    dma.ch(0)
+        .in_int()
+        .ena()
+        .modify(|_, w| w.in_done().set_bit());
 
     let reg = unsafe { &*esp_hal::peripherals::UHCI0::PTR };
     reg.conf0().modify(|_, w| {
@@ -169,7 +180,7 @@ async fn main(_spawner: Spawner) -> ! {
 
             executor.run(|spawner| {
                 // spawner.spawn(core_1_display(epd, spi_device).unwrap());
-                // spawner.spawn(core_1_serial(drx).unwrap());
+                spawner.spawn(core_1_serial(drx).unwrap());
             });
         },
     );
