@@ -35,7 +35,11 @@ use msh_esp_core::{
     bbqueue::Notify,
     micropb::{MessageEncode, PbEncoder},
     proto::{FromRadio, PayloadVariant, ToRadio},
-    serial::{self, ConsumedFrameBytes, FRAME_MAX_SIZE, FRAME_START1, FRAME_START2, Frame},
+    serial::{
+        frame::{
+            ConsumedFrameBytes, FRAME_MAX_SIZE, FRAME_START1, FRAME_START2, Frame, FrameProcessor,
+        },
+    },
 };
 use static_cell::StaticCell;
 
@@ -117,9 +121,8 @@ async fn main(_spawner: Spawner) -> ! {
         .modify(|_, w| w.in_done().set_bit());
 
     let reg = unsafe { &*esp_hal::peripherals::UHCI0::PTR };
-    reg.conf0().modify(|_, w| {
-        w.seper_en().clear_bit().uart_idle_eof_en().set_bit()
-    });
+    reg.conf0()
+        .modify(|_, w| w.seper_en().clear_bit().uart_idle_eof_en().set_bit());
 
     let (uhci_rx, uhci_tx) = uhci.split();
 
@@ -175,7 +178,7 @@ async fn main(_spawner: Spawner) -> ! {
     let stream = esp_hal::dma_rx_stream_buffer!(4096, 64);
     let mut transfer = uhci_rx.read(stream).unwrap_or_else(|e| panic!("{:?}", e.0));
 
-    let mut frame_parser = serial::MeshtasticFrame::new();
+    let mut frame_parser = FrameProcessor::new();
     let frame_size: u16 = FRAME_MAX_SIZE.try_into().unwrap();
     let mut grant = trx.grant(frame_size).ok();
 
